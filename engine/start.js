@@ -1,4 +1,5 @@
 const BitgetEngine = require("./bitget");
+const TickerEngine = require("./ticker");
 
 /**
  * Responsible for the successful intialization of various engines
@@ -6,7 +7,7 @@ const BitgetEngine = require("./bitget");
  */
 const startEngine = () => {
     return new Promise(async (resolve, reject) => {
-        const started = (await BitgetEngine.start());
+        const started = (await BitgetEngine.start()) && (await TickerEngine.start());
         resolve(started);
     })
 }
