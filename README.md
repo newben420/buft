@@ -1,0 +1,3 @@
+# Bitget USDT-M Futures Trader (BUFT)
+
+Just a bot. Maybe I should build this publicly... Just for fun...
