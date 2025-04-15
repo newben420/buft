@@ -18,7 +18,7 @@ class Analysis {
         return new Promise((resolve, reject) => {
             Log.flow(`Analysis > ${symbol} > Initialized.`, 5);
             if (data.length >= Site.AS_MIN_ROWS) {
-                
+                // TODO - run analysis
             }
             else {
                 Log.flow(`Analysis > ${symbol} > Error > Not enough rows.`, 5);
