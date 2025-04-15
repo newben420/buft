@@ -14,6 +14,30 @@ class TickerEngine {
     static #tickers = {};
 
     /**
+     * Deletes a ticker
+     * @param {string} symbol 
+     * @returns {Promise<boolean>}
+     */
+    static deleteTicker = async (symbol) => {
+        if (TickerEngine.#tickers[symbol]) {
+            Log.flow(`TickerEngine > Delete > ${symbol}.`, 2);
+            const destroyed = await TickerEngine.#tickers[symbol].destroy();
+            if(destroyed){
+                delete TickerEngine.#tickers[symbol];
+                Log.flow(`TickerEngine > Delete > ${symbol} > Successful.`, 2);
+                resolve(true);
+            }
+            else{
+                Log.flow(`TickerEngine > Delete > ${symbol} > Failed.`, 2);
+                resolve(false);
+            }
+        }
+        else{
+            resolve(true);
+        }
+    };
+
+    /**
      * Adds new ticker
      * @param {string} symbol 
      * @returns {Promise<boolean>}

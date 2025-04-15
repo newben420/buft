@@ -34,6 +34,9 @@ class Ticker {
      */
     last_fetched;
 
+    /**
+     * Keeps the ticker alive
+     */
     fetchCandleStickData() {
         this.last_fetched = Date.now();
         const conclude = () => {
@@ -95,6 +98,19 @@ class Ticker {
             Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Error > Unknwown.`, 5);
             this.candlestickData = [];
             conclude();
+        });
+    }
+
+    /**
+     * destroys the ticker internally
+     * @returns {Promise<boolean>}
+     */
+    destroy(){
+        return new Promise((resolve, reject) => {
+            if (this.dataTimeoutObject) {
+                clearTimeout(this.dataTimeoutObject);
+            }
+            resolve(true);
         });
     }
 
