@@ -1,3 +1,9 @@
+const { config } = require("dotenv");
+const args = process.argv.slice(2);
+config({
+    path: args[0] || ".env"
+});
+
 /**
  * Responsible for application-wide variables and configurations
  */
@@ -10,6 +16,10 @@ class Site {
     static FLOW_LOG_MAX_PRIORITY = parseInt(process.env.FLOW_LOG_MAX_PRIORITY || "5");
     static EXIT_ON_UNCAUGHT_EXCEPTION = (process.env.EXIT_ON_UNCAUGHT_EXCEPTION || "").toLowerCase() == "true";
     static EXIT_ON_UNHANDLED_REJECTION = (process.env.EXIT_ON_UNHANDLED_REJECTION || "").toLowerCase() == "true";
+
+    static BG_API_KEY = process.env.BG_API_KEY || "";
+    static BG_API_SECRET = process.env.BG_API_SECRET || "";
+    static BG_API_PASSPHRASE = process.env.BG_API_PASSPHRASE || "";
 
 }
 
