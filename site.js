@@ -25,6 +25,8 @@ class Site {
     static TK_INTERVAL = reverseGranularity(Site.TK_GRANULARITY);
     static TK_MAX_ROWS = parseInt(process.env.TK_MAX_ROWS || "100");
 
+    static AS_MIN_ROWS = parseInt(process.env.AS_MIN_ROWS || "100");
+
     static BG_API_KEY = process.env.BG_API_KEY || "";
     static BG_API_SECRET = process.env.BG_API_SECRET || "";
     static BG_API_PASSPHRASE = process.env.BG_API_PASSPHRASE || "";
