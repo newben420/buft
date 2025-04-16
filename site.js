@@ -4,7 +4,8 @@ const args = process.argv.slice(2);
 config({
     path: args[0] || ".env"
 });
-
+const path = require("path");
+const rootDir = require("./root");
 /**
  * Responsible for application-wide variables and configurations
  */
@@ -27,6 +28,7 @@ class Site {
 
     static AS_MIN_ROWS = parseInt(process.env.AS_MIN_ROWS || "100");
 
+    static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");
     static IN_BOOLEAN_THRESHOLD_MIN_RATIO = parseFloat(process.env.IN_BOOLEAN_THRESHOLD_MIN_RATIO || "0.5");
     static IN_MACD_FAST_PERIOD = parseInt(process.env.IN_MACD_FAST_PERIOD || "12") || 12;
@@ -44,6 +46,7 @@ class Site {
     static IN_STOCH_SIGNAL_PERIOD = parseInt(process.env.IN_STOCH_SIGNAL_PERIOD || "3") || 3;
     static IN_MAX_SIGNAL_HISTORY_LENGTH = parseInt(process.env.IN_MAX_SIGNAL_HISTORY_LENGTH || "5") || "5";
     static IN_ML_COLLECT_DATA = (process.env.IN_ML_COLLECT_DATA || "").toLowerCase() == "true";
+    static IN_ML_DATA_PATH = Site.IN_ML_COLLECT_DATA ? (path.join(rootDir(), `ml_data.json`)) : "";
 
     static BG_API_KEY = process.env.BG_API_KEY || "";
     static BG_API_SECRET = process.env.BG_API_SECRET || "";

@@ -1,16 +1,43 @@
 class Signal {
     /**
-     * Type of entry signal
-     * @type {"SHORT"|"LONG"}
+     * @type {boolean}
      */
-    type;
+    short;
+
+    /**
+    * @type {boolean}
+    */
+    long;
+
+    /**
+     * @type {string}
+     */
+    description;
+
+    /**
+     * @type {number}
+     */
+    volatilityPerc;
+
+    /**
+     * @type {number}
+     */
+    tpslPerc;
 
     /**
      * Object constructor
-     * @param {"SHORT"|"LONG"} ty
+     * @param {boolean} short
+     * @param {boolean} long
+     * @param {string} description
+     * @param {number} volPerc
+     * @param {number} tpslPerc
      */
-    constructor(ty){
-        this.type = ty;
+    constructor(short, long, description, volPerc, tpslPerc) {
+        this.short = short;
+        this.long = long;
+        this.description = description;
+        this.volatilityPerc = volPerc;
+        this.tpslPerc = tpslPerc;
     }
 }
 

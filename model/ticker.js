@@ -57,11 +57,10 @@ class Ticker {
             }
         }
         Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Initialized.`, 5);
-        BitgetEngine.getRestClient().getFuturesHistoricCandles({
+        BitgetEngine.getRestClient().getFuturesCandles({
             granularity: Site.TK_GRANULARITY,
             productType: Site.TK_PRODUCT_TYPE,
             symbol: this.symbol,
-            endTime: Math.floor(Date.now() / 1000) * 1000,
             kLineType: "MARKET",
             limit: this.candlestickData.length > 0 ? `1` : `${Site.TK_MAX_ROWS}`,
         }).then(data => {

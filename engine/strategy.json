@@ -1,0 +1,152 @@
+{
+    "Bullish Long": {
+        "threshold": 5,
+        "rules": [
+            {
+                "var": "overallBull",
+                "value": true,
+                "weight": 2
+            },
+            {
+                "var": "supportBull",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "goodBuy",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "overBought",
+                "value": false,
+                "weight": 0.5
+            },
+            {
+                "var": "bearishReversal",
+                "value": false,
+                "weight": 0.5
+            },
+            {
+                "var": "adxStrong",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "priceDir",
+                "value": 1,
+                "weight": 1
+            }
+        ]
+    },
+    "Bearish Long": {
+        "threshold": 4,
+        "rules": [
+            {
+                "var": "overallBear",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "bullishReversal",
+                "value": true,
+                "weight": 2
+            },
+            {
+                "var": "overSold",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "goodBuy",
+                "value": true,
+                "weight": 0.5
+            },
+            {
+                "var": "adxWeak",
+                "value": true,
+                "weight": 0.5
+            },
+            {
+                "var": "priceDir",
+                "value": 1,
+                "weight": 0.5
+            }
+        ]
+    },
+    "Bearish Short": {
+        "threshold": 5,
+        "rules": [
+            {
+                "var": "overallBear",
+                "value": true,
+                "weight": 2
+            },
+            {
+                "var": "supportBear",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "goodSell",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "overSold",
+                "value": false,
+                "weight": 0.5
+            },
+            {
+                "var": "bullishReversal",
+                "value": false,
+                "weight": 0.5
+            },
+            {
+                "var": "adxStrong",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "priceDir",
+                "value": -1,
+                "weight": 1
+            }
+        ]
+    },
+    "Bullish Short": {
+        "threshold": 4,
+        "rules": [
+            {
+                "var": "overallBull",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "bearishReversal",
+                "value": true,
+                "weight": 2
+            },
+            {
+                "var": "overBought",
+                "value": true,
+                "weight": 1
+            },
+            {
+                "var": "goodSell",
+                "value": true,
+                "weight": 0.5
+            },
+            {
+                "var": "adxWeak",
+                "value": true,
+                "weight": 0.5
+            },
+            {
+                "var": "priceDir",
+                "value": -1,
+                "weight": 0.5
+            }
+        ]
+    }
+}
