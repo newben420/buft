@@ -312,19 +312,19 @@ class Analysis {
                 
                 // TODO - CORRECT MULTILAYRED SIGNALS HERE
 
-                console.log("LONG =>", long, "| SHORT =>", short, "| DESC =>", description, "| VT =>", VT, "| SIGNALS =>", signals, "| RESULT =>", result);
-                console.log("OVERALL", "BULL", overallBull, "BEAR", overallBear);
-                console.log("SUPPORT", "BULL", supportBull, "BEAR", supportBear);
-                console.log("ADX (TREND STRENGTH)", "STRONG", adxStrong, "WEAK", adxWeak);
-                console.log("EXTRA BUY/SELL", "BUY", goodBuy, "SELL", goodSell);
-                console.log("VOLATILITY PERCENTAGE", volatilityPerc);
-                console.log("TRAILING STOP LOSS PERCENTAGE", TPSLPerc);
-                console.log("OVERBOUGHT (Stoch, CCI, MFI, RSI) ", stochOB, cciOB, mfiOB, rsiOB);
-                console.log("OVERSOLD (Stoch, CCI, MFI, RSI) ", stochOS, cciOS, mfiOS, rsiOS);
-                console.log("BULL TREND BEARISH REVERSAL", bearishReversal);
-                console.log("BEAR TREND BULLISH REVERSAL", bullishReversal);
-                console.log("PRICE DIR", priceDir);
-                console.log("LATEST PRICE", latestRate);
+                // console.log("LONG =>", long, "| SHORT =>", short, "| DESC =>", description, "| VT =>", VT, "| SIGNALS =>", signals, "| RESULT =>", result);
+                // console.log("OVERALL", "BULL", overallBull, "BEAR", overallBear);
+                // console.log("SUPPORT", "BULL", supportBull, "BEAR", supportBear);
+                // console.log("ADX (TREND STRENGTH)", "STRONG", adxStrong, "WEAK", adxWeak);
+                // console.log("EXTRA BUY/SELL", "BUY", goodBuy, "SELL", goodSell);
+                // console.log("VOLATILITY PERCENTAGE", volatilityPerc);
+                // console.log("TRAILING STOP LOSS PERCENTAGE", TPSLPerc);
+                // console.log("OVERBOUGHT (Stoch, CCI, MFI, RSI) ", stochOB, cciOB, mfiOB, rsiOB);
+                // console.log("OVERSOLD (Stoch, CCI, MFI, RSI) ", stochOS, cciOS, mfiOS, rsiOS);
+                // console.log("BULL TREND BEARISH REVERSAL", bearishReversal);
+                // console.log("BEAR TREND BULLISH REVERSAL", bullishReversal);
+                // console.log("PRICE DIR", priceDir);
+                // console.log("LATEST PRICE", latestRate);
 
                 resolve(signal);
 
