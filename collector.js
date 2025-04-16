@@ -69,7 +69,7 @@ class Collector {
                     const data = Collector.#csData[symbol].slice((i + 1 - Site.TK_MAX_ROWS), (i + 1));
                     const analysed = await Analysis.run(symbol, data);
                 }
-                Log.flow(`Collector > ${symbol} > Analysis succeeded succeeded (${t} time${l == 1 ? "" : "s"}).`, 0);
+                Log.flow(`Collector > ${symbol} > Analysis succeeded (${t} time${l == 1 ? "" : "s"}).`, 0);
             }
             Log.flow(`Collector > ${symbol} > Concluded.`, 0);
         }
