@@ -3,17 +3,34 @@ const Log = require("../lib/log");
 const Order = require("../model/order");
 const Signal = require("../model/signal");
 const Site = require("../site");
+const Account = require("./account");
 const BitgetEngine = require("./bitget");
 
 /**
  * Manages trades and signal exec.
  */
 class Trader {
+
     /**
-     * Is called when there is a new signal received
-     * @param {string} symbol 
-     * @param {Signal} signal 
+     * If true, incoming signals are executed, else, ignored.
+     * @type {boolean}
      */
+    static #enabled = Site.TR_AUTO_ENABLED;
+
+    /**
+     * Toggle trader status and return new value
+     * @returns {boolean}
+     */
+    static toggle = () => {
+        Trader.#enabled = !Trader.#enabled;
+        return Trader.#enabled;
+    }
+
+    /**
+     * Returns true if trader is enabled.
+     * @returns {boolean}
+     */
+    static isEnabled = () => Trader.#enabled;
 
     /**
      * All current active orders
@@ -21,10 +38,185 @@ class Trader {
      */
     static #orders = [];
 
+    /**
+    * Is called when there is a new signal received
+    * @param {string} symbol 
+    * @param {Signal} signal 
+    */
     static newSignal = (symbol, signal) => {
-        // TODO - STREAMLINE ORDER PROCESS AND SUBSCRIBE TO ORDER WS ON START
-        // TODO - work on the method "OpenOrder" and ensure only one order is active per ticker when all necessary conditions are met (enough balance, enough entry amount, ticker has no active order....e.t.c.)
-        // TODO - work on the method "closeOrder" which can be called internally or even from the user interface
+        const index = Trader.#orders.findIndex(x => x.symbol == symbol);
+        if (Trader.#enabled && Site.TR_SIGNAL_BLACKLIST.indexOf(signal.description) == -1 && index < 0 && Trader.#orders.length < Site.TR_GRID_LENGTH) {
+            // Signal can be executed
+            Trader.openOrder(symbol, signal);
+        }
+    }
+
+    /**
+     * Flag to indicate if an order is currently being opened.
+     * It is used to ignore orders that cannot be ordered immediately.
+     * @type {boolean}
+     */
+    static #isOpening = false;
+
+    /**
+     * Holds observed volatility percentage of a ticker at order open time
+     * @type {Record<string, number>}
+     */
+    static #volatility = {};
+
+    /**
+     * Holds observed trailing stop loss percentage of a ticker at order open time
+     * @type {Record<string, number>}
+     */
+    static #trailingStopLoss = {};
+
+    /**
+     * Streamlined open order method
+     * @param {string} symbol 
+     * @param {Signal} signal 
+     * @returns {Promise<boolean>}
+     */
+    static openOrder = (symbol, signal) => {
+        return new Promise(async (resolve, reject) => {
+            if (!Trader.#isOpening) {
+                Trader.#isOpening = true;
+                const balance = Account.getBalance();
+                const capital = Math.min(Site.TR_MAX_CAPITAL_MCOIN, Math.max(0, balance / (Site.TR_GRID_LENGTH / Trader.#orders.length)));
+                Log.flow(`Trader > Open > ${symbol} > ${signal.long ? "LONG" : "SHORT"} > Balance: ${FFF(balance)} | Capital: ${FFF(capital)}.`, 3);
+                if (capital > 0) {
+                    // Capital is tangible
+                    let success = false;
+                    try {
+                        const config = await Promise.all([
+                            BitgetEngine.getRestClient().getFuturesContractConfig({
+                                productType: Site.TK_PRODUCT_TYPE,
+                                symbol: symbol,
+                            }),
+                            BitgetEngine.getRestClient().getFuturesTicker({
+                                productType: Site.TK_PRODUCT_TYPE,
+                                symbol: symbol,
+                            }),
+                        ]);
+                        if (config[0].msg == "success" && config[0].data && Array.isArray(config[0].data) && config[1].msg == "success" && config[1].data && Array.isArray(config[1].data)) {
+                            const cfg = config[0].data[0];
+                            const tkr = config[1].data[0];
+                            const price = parseFloat(tkr.lastPr) || 0;
+                            const mul = parseFloat(cfg.sizeMultiplier) || 0;
+                            const amt = Math.floor((capital / price) / mul) * mul;
+                            const minAmt = parseFloat(cfg.minTradeNum) || 0;
+                            // const valid = amt >= minAmt
+                            Log.flow(`Trader > Open > ${symbol} > ${cfg.baseCoin} ${FFF(amt)}.`, 3);
+                            const cannotTrade = ["maintain", "limit_open", "restrictedAPI", "off"].indexOf(cfg.symbolStatus) != -1;
+                            if (cannotTrade) {
+                                Log.flow(`Trader > Open > ${symbol} > Error > '${cfg.symbol}' status.`, 3);
+                            }
+                            else if (amt < minAmt) {
+                                Log.flow(`Trader > Open > ${symbol} > Error > ${cfg.baseCoin} ${FFF(amt)} is less than minimum of ${cfg.baseCoin} ${FFF(minAmt)}.`, 3);
+                            }
+                            else {
+                                // valid
+                                const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
+                                    symbol: symbol,
+                                    productType: Site.TK_PRODUCT_TYPE,
+                                    marginMode: Site.TR_MARGIN_MODE,
+                                    marginCoin: Site.TK_MARGIN_COIN,
+                                    side: signal.long ? "buy" : "sell",
+                                    tradeSide: "open",
+                                    orderType: "market",
+                                    size: `${amt}`,
+                                });
+                                if (order.msg == "success") {
+                                    Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
+                                    Trader.#volatility[symbol] = signal.volatilityPerc;
+                                    Trader.#trailingStopLoss[symbol] = signal.tpslPerc;
+                                    success = true;
+                                }
+                                else {
+                                    Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
+                                }
+                            }
+                        }
+                        else {
+                            Log.flow(`Trader > Open > ${symbol} > Error > "${config[0].code} - ${config[0].msg}" and "${config[1].code} - ${config[1].msg}".`, 3);
+                        }
+
+                    } catch (error) {
+                        Log.dev(error);
+                        Log.flow(`Trader > Open > ${symbol} > Error > Unknown error.`, 3);
+                    }
+                    finally {
+                        Trader.#isOpening = false;
+                        resolve(success);
+                    }
+                }
+                else {
+                    Log.flow(`Trader > Open > ${symbol} > Error > Insufficient capital.`, 3);
+                    Trader.#isOpening = false;
+                    resolve(false);
+                }
+            }
+            else {
+                resolve(false);
+            }
+        })
+
+    }
+
+    /**
+     * @type {Record<string, boolean>}
+     */
+    static #isClosing = {}
+
+    /**
+     * Streamlined close Order Method.
+     * @param {string} symbol 
+     * @returns {Promise<boolean>}
+     */
+    static closeOrder = (symbol) => {
+        return new Promise(async (resolve, reject) => {
+            Log.flow(`Trader > Close > ${symbol}.`, 3);
+            if (!Trader.#isClosing[symbol]) {
+                Trader.#isClosing[symbol] = true;
+                const order = Trader.#orders.filter(x => x.symbol == symbol)[0];
+                if (order) {
+                    let success = false;
+                    try {
+                        const ord = await BitgetEngine.getRestClient().futuresSubmitOrder({
+                            symbol: symbol,
+                            productType: Site.TK_PRODUCT_TYPE,
+                            marginMode: Site.TR_MARGIN_MODE,
+                            marginCoin: Site.TK_MARGIN_COIN,
+                            side: order.side == "long" ? "buy" : "sell",
+                            tradeSide: "close",
+                            orderType: "market",
+                            size: `${order.size}`,
+                        });
+                        if (ord.msg == "success") {
+                            Log.flow(`Trader > Close > ${symbol} > ${order.side.toUpperCase()} > Success.`, 3);
+                            success = true;
+                        }
+                        else {
+                            Log.flow(`Trader > Close > ${symbol} > Error > "${ord.code} - ${ord.msg}".`, 3);
+                        }
+                    } catch (error) {
+                        Log.dev(error);
+                        Log.flow(`Trader > Close > ${symbol} > Error > Unknown error.`, 3);
+                    }
+                    finally {
+                        delete Trader.#isClosing[symbol];
+                        resolve(success);
+                    }
+                }
+                else {
+                    Log.flow(`Trader > Close > ${symbol} > Error > No active order for this ticker.`, 3);
+                    delete Trader.#isClosing[symbol];
+                    resolve(false);
+                }
+            }
+            else {
+                resolve(false);
+            }
+        });
     }
 
     /**
@@ -39,8 +231,8 @@ class Trader {
                 await BitgetEngine.addCallbackFunction("position_update", Trader.#positionUpdate);
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "orders");
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "positions");
-                const recovered = await Trader.#getPositions();
-                if(recovered && Trader.#orders.length > 0){
+                const recovered = await Trader.#getPositions(true);
+                if (recovered && Trader.#orders.length > 0) {
                     const l = Trader.#orders.length;
                     Log.flow(`Trader > Recover > ${l} order${l == 1 ? "" : "s"} registered.`, 0);
                 }
@@ -58,11 +250,12 @@ class Trader {
      * @param {Order} order 
      */
     static #pushOrder = (order) => {
+        console.log(order);
         const id = Trader.#orders.findIndex(x => x.symbol == order.symbol);
-        if(id >= 0){
+        if (id >= 0) {
             Trader.#orders.splice(id, 1, order);
         }
-        else{
+        else {
             Trader.#orders.push(order);
         }
     }
@@ -73,11 +266,13 @@ class Trader {
      */
     static #popOrder = (symbol) => {
         Trader.#orders = Trader.#orders.filter(x => x.symbol != symbol);
+        delete Trader.#volatility[symbol];
+        delete Trader.#trailingStopLoss[symbol];
     }
 
     /**
      * Get active positions
-     * @param {*} recovery - If true, creates orders from positions, else calls update on each
+     * @param {boolean} recovery - If true, creates orders from positions, else calls update on each
      * @returns {Promise<boolean>}
      */
     static #getPositions = (recovery) => {
@@ -139,12 +334,12 @@ class Trader {
         const conclude = () => {
             const stopTime = Date.now();
             const diff = stopTime - startTime;
-            if(diff >= Site.TR_POS_UPDATE_INTERVAL_MS){
+            if (diff >= Site.TR_POS_UPDATE_INTERVAL_MS) {
                 Trader.#getUpdatedPositions();
             }
-            else{
+            else {
                 const remaining = Site.TR_POS_UPDATE_INTERVAL_MS - diff;
-                if(Trader.#periodicUpdateReference){
+                if (Trader.#periodicUpdateReference) {
                     clearTimeout(Trader.#periodicUpdateReference);
                 }
                 Trader.#periodicUpdateReference = setTimeout(() => {
@@ -153,16 +348,14 @@ class Trader {
             }
         }
 
-        if(Trader.#orders.length > 0){
+        if (Trader.#orders.length > 0) {
             const done = await Trader.#getPositions(false);
             conclude();
         }
-        else{
+        else {
             conclude();
         }
     }
-
-    static #registerOrder = (symbol,) => { }
 
     /**
      * Called when orders are created.
@@ -197,13 +390,24 @@ class Trader {
      * @param {number} profit 
      */
     static #fillOrder = (symbol, side, tradeSide, ts, OID, COID, size, price, profit) => {
-        Log.flow(`Trader > ${symbol} > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled${profit ? ` > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)}` : ''}.`, 1);
         if (tradeSide == "open") {
             const order = new Order(symbol, ts, price, side, size);
+            Log.flow(`Trader > ${symbol} > Opened > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled.`, 1);
+            // TODO - SEND OUT NOTIFICATION
             Trader.#pushOrder(order);
         }
         else if (tradeSide == "close") {
-            // TODO - calculate net pnl from breakevenprice and closing fill price and remove order
+            const order = Trader.#orders.filter(x => x.symbol == symbol && x.side == side)[0];
+            if (order) {
+                order.close_price = price;
+                order.close_time = ts;
+                order.gross_profit = profit;
+                const netProfit = (price - order.breakeven_price) / order.breakeven_price * 100;
+                order.net_profit = netProfit;
+                Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
+                // TODO - SEND OUT NOTIFICATION TO UI
+                Trader.#popOrder(symbol);
+            }
         }
     }
 
@@ -219,7 +423,20 @@ class Trader {
      */
     static #positionUpdate = (symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage) => {
         Log.flow(`Trader > Position > ${symbol} > ${Site.TK_MARGIN_COIN} ${FFF(pnl)} (${roi.toFixed(2)}%)`, 2);
-        // TODO update order properties and compute order closing strategy
+        const order = Trader.#orders.filter(x => x.symbol == symbol && x.side == side)[0];
+        if (order) {
+            order.breakeven_price = breakEvenPrice;
+            order.liquidation_price = liquidPrice;
+            order.gross_profit = pnl;
+            order.roi = roi;
+            if (order.peak_roi == 0 || roi > order.peak_roi) {
+                order.peak_roi = roi;
+            }
+            if (order.least_roi == 0 || roi > order.least_roi) {
+                order.least_roi = roi;
+            }
+            // TODO compute order closing strategy
+        }
     }
 
 }

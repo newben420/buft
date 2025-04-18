@@ -26,6 +26,9 @@ class Site {
     static TK_GRANULARITY = process.env.TK_GRANULARITY || "1m";
     static TK_INTERVAL = reverseGranularity(Site.TK_GRANULARITY);
     static TK_MAX_ROWS = parseInt(process.env.TK_MAX_ROWS || "100");
+    static TK_LEVERAGE_LONG = process.env.TK_LEVERAGE_LONG || "5";
+    static TK_LEVERAGE_SHORT = process.env.TK_LEVERAGE_SHORT || "5";
+    static TK_LEVERAGE_CROSS = process.env.TK_LEVERAGE_CROSS || "5";
 
     static AS_MIN_ROWS = parseInt(process.env.AS_MIN_ROWS || "100");
 
@@ -33,8 +36,12 @@ class Site {
     static CL_ROWS = parseInt(process.env.CL_ROWS || "1000");
     static CL_MAX_ROWS_PER_FETCH = parseInt(process.env.CL_MAX_ROWS_PER_FETCH || "1000");
 
+    static TR_AUTO_ENABLED = (process.env.TR_AUTO_ENABLED || "").toLowerCase() == "true";
+    static TR_GRID_LENGTH = parseInt(process.env.TR_GRID_LENGTH || "1") || 1;
+    static TR_MAX_CAPITAL_MCOIN = parseFloat(process.env.TR_MAX_CAPITAL_MCOIN || "0") || Infinity;
     static TR_SIGNAL_BLACKLIST = (process.env.TR_SIGNAL_BLACKLIST || "").split(" ").filter(x => x.length > 0).map(x => x.replace(/_/g, " "));
     static TR_POS_UPDATE_INTERVAL_MS = parseInt(process.env.TR_POS_UPDATE_INTERVAL_MS || "1000") || 1000;
+    static TR_MARGIN_MODE = process.env.TR_MARGIN_MODE || "isolated";
 
     static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");
