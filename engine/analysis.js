@@ -5,7 +5,7 @@ const Candlestick = require("../model/candlestick");
 const Multilayered = require("../model/multilayered");
 const Signal = require("../model/signal");
 const Site = require("../site");
-const fs = Site.IN_ML_COLLECT_DATA ? require("fs") : {};
+const fs = require("fs");
 const strategy = require("./strategy.json");
 const {
     MACD, PSAR, Stochastic, bullish, bearish, VWAP, ADL, ATR, AwesomeOscillator, ROC, ForceIndex,
@@ -106,6 +106,7 @@ class Analysis {
      * @param {number} vol 
      * @param {number} tpsl 
      * @param {string} desc 
+     * @param {any} extra 
      */
     static #collector = (
         symbol,
@@ -115,23 +116,23 @@ class Analysis {
         short,
         vol,
         tpsl,
-        desc
+        desc,
+        extra
     ) => {
-        if (Site.IN_ML_COLLECT_DATA) {
-            if (!Analysis.#collectedData[symbol]) {
-                Analysis.#collectedData[symbol] = [];
-            }
-            if (signal) {
-                Analysis.#collectedData[symbol].push({
-                    rate,
-                    signal,
-                    long,
-                    short,
-                    vol,
-                    tpsl,
-                    desc,
-                });
-            }
+        if (!Analysis.#collectedData[symbol]) {
+            Analysis.#collectedData[symbol] = [];
+        }
+        if (signal) {
+            Analysis.#collectedData[symbol].push({
+                rate,
+                signal,
+                long,
+                short,
+                vol,
+                tpsl,
+                desc,
+                extra,
+            });
         }
     }
 
@@ -142,7 +143,7 @@ class Analysis {
     static stop = () => {
         return new Promise((resolve, reject) => {
             try {
-                if (Site.IN_ML_COLLECT_DATA && Object.keys(Analysis.#collectedData).length > 0) {
+                if (Object.keys(Analysis.#collectedData).length > 0) {
                     fs.writeFileSync(Site.IN_ML_DATA_PATH, JSON.stringify(Analysis.#collectedData, null, "\t"));
                     Log.flow(`Collector > Data collection saved to ${Site.IN_ML_DATA_PATH}`, 0);
                 }
@@ -154,6 +155,12 @@ class Analysis {
             }
         })
     }
+
+    /**
+     * Keeps track of immediate past overbought and oversold values of each ticker
+     * @type {Record<string, Record<string, boolean>}
+     */
+    static #obos = {}
 
     /**
      * Runs analysis on candlestic kdata
@@ -175,6 +182,9 @@ class Analysis {
                 const csd = { open, close, high, low };
 
                 const priceDir = computeArithmeticDirection(close);
+                if(!Analysis.#obos[symbol]){
+                    Analysis.#obos[symbol] = {};
+                }
 
 
                 // PRIMARY INDICATORS
@@ -216,12 +226,15 @@ class Analysis {
                 const trix = TRIX.calculate({ period: Site.IN_MA_PERIOD, values: close });
                 const trixBull = (trix[trix.length - 1] ?? 0) > 0;
                 const trixBear = (trix[trix.length - 1] ?? 0) < 0;
-                const adx = ADX.calculate({ close, high, low, period: Site.IN_MA_PERIOD });
+                const adx = ADX.calculate({ close, high, low, period: Site.IN_MA_PERIOD * 2 });
                 const adxStrong = adx.length > 0 ? ((adx[adx.length - 1].adx || adx[adx.length - 1].adx === 0) ? adx[adx.length - 1].adx > 25 : false) : false;
                 const adxWeak = adx.length > 0 ? ((adx[adx.length - 1].adx || adx[adx.length - 1].adx === 0) ? adx[adx.length - 1].adx < 20 : false) : false;
                 const bb = BollingerBands.calculate({ period: Site.IN_BB_PERIOD, stdDev: Site.IN_BB_STDDEV, values: close });
                 const bbBuy = bb.length > 0 ? latestRate < bb[bb.length - 1].lower : false;
                 const bbSell = bb.length > 0 ? latestRate > bb[bb.length - 1].upper : false;
+                const bbOS = bbBuy;
+                const bbOB = bbSell;
+
                 // OVERBOUGHT AND OVERSOLD INDICATORS
                 const cci = CCI.calculate({ close, high, low, period: Site.IN_MA_PERIOD });
                 const mfi = MFI.calculate({ close, high, low, volume, period: Math.min(Site.IN_MA_PERIOD, data.length) });
@@ -233,15 +246,20 @@ class Analysis {
                 const cciOS = (cci[cci.length - 1] ?? 1) < -100;
                 const mfiOS = (mfi[mfi.length - 1] ?? 20) < 20;
                 const rsiOS = (rsi[rsi.length - 1] ?? 30) < 30;
+
                 // CANDLESTICK COMPUTATIONS
-                const bearishReversal = abandonedbaby(csd) || bearishengulfingpattern(csd) ||
+                const bearishReversal = (abandonedbaby(csd) || bearishengulfingpattern(csd) ||
                     darkcloudcover(csd) || piercingline(csd) || eveningstar(csd) || eveningdojistar(csd) ||
                     threeblackcrows(csd) || gravestonedoji(csd) || bearishharami(csd) || bearishmarubozu(csd) ||
-                    tweezertop(csd) || hangingman(csd) || shootingstar(csd) || bearishharamicross(csd);
-                const bullishReversal = abandonedbaby(csd) || bullishengulfingpattern(csd) ||
+                    tweezertop(csd) || hangingman(csd) || shootingstar(csd) || bearishharamicross(csd)) && 
+                    Analysis.#obos[symbol].ob &&
+                    clearDirection(close.slice(close.length - 3)) <= 0;
+                const bullishReversal = (abandonedbaby(csd) || bullishengulfingpattern(csd) ||
                     threewhitesoldiers(csd) || morningstar(csd) || morningdojistar(csd) || hammerpattern(csd) ||
                     dragonflydoji(csd) || bullishharami(csd) || bullishmarubozu(csd) || bullishharamicross(csd) ||
-                    tweezerbottom(csd);
+                    tweezerbottom(csd)) && Analysis.#obos[symbol].os &&
+                    clearDirection(close.slice(close.length - 3)) >= 0;
+
                 // PREFLOW COMPUTATIONS
                 const overallBull = macdBull && (psarBull || stochBull);
                 const overallBear = macdBear && (psarBear || stochBear);
@@ -283,8 +301,8 @@ class Analysis {
                 }
 
                 // FINAL COMPUTATIONS
-                const overBought = booleanThreshold([stochOB, cciOB, mfiOB, rsiOB]);
-                const overSold = booleanThreshold([stochOS, cciOS, mfiOS, rsiOS]);
+                const overBought = booleanThreshold([stochOB, cciOB, mfiOB, rsiOB, bbOB]);
+                const overSold = booleanThreshold([stochOS, cciOS, mfiOS, rsiOS, bbOS]);
                 const currentState = {
                     overallBull,
                     overallBear,
@@ -307,27 +325,66 @@ class Analysis {
                 Analysis.#multilayer(symbol, long, short, description, latestRate, ts, signal);
                 const signals = Analysis.#getMultilayeredHistory(symbol);
 
+                // CORRECT SIGNALS HERE
+                const {nlong, nshort } = Analysis.#correctSignals(signals, long, short, description);
+                signal.long = nlong;
+                signal.short = nshort;
+
+                if((long || short) && !nlong && !nshort){
+                    signal.description = "Corrected Signal";
+                }
+
                 // COLLECT DATA FOR EXTERNAL MULTILAYER ANALYSIS FROM HERE
-                Analysis.#collector(symbol, latestRate, signals[signals.length - 1], long, short, volatilityPerc, TPSLPerc, description);
-                
-                // TODO - CORRECT MULTILAYRED SIGNALS HERE
+                if (Site.IN_ML_COLLECT_DATA) {
+                    Analysis.#collector(symbol, latestRate, signals[signals.length - 1], signal.long, signal.short, volatilityPerc, TPSLPerc, signal.description,
+                        {
+                            macdBear,
+                            macdBull,
+                            psarBull,
+                            psarBear,
+                            stochBull,
+                            stochBear,
+                            trendBull,
+                            trendBear,
+                            vwapBull,
+                            adlBull,
+                            aoBull,
+                            rocBull,
+                            fiBull,
+                            trixBull,
+                            vwapBear,
+                            adlBear,
+                            aoBear,
+                            rocBear,
+                            fiBear,
+                            trixBear,
+                            stochOB, cciOB, mfiOB, rsiOB,
+                            stochOS, cciOS, mfiOS, rsiOS,
+                            bearishReversal,
+                            bullishReversal,
+                            priceDir,
+                            VT,
+                            overallBull,
+                            overallBear,
+                            supportBull,
+                            supportBear,
+                            goodBuy,
+                            goodSell,
+                            overBought,
+                            overSold,
+                            adxStrong,
+                            adxWeak,
+                        }
+                    );
+                }
 
-                // console.log("LONG =>", long, "| SHORT =>", short, "| DESC =>", description, "| VT =>", VT, "| SIGNALS =>", signals, "| RESULT =>", result);
-                // console.log("OVERALL", "BULL", overallBull, "BEAR", overallBear);
-                // console.log("SUPPORT", "BULL", supportBull, "BEAR", supportBear);
-                // console.log("ADX (TREND STRENGTH)", "STRONG", adxStrong, "WEAK", adxWeak);
-                // console.log("EXTRA BUY/SELL", "BUY", goodBuy, "SELL", goodSell);
-                // console.log("VOLATILITY PERCENTAGE", volatilityPerc);
-                // console.log("TRAILING STOP LOSS PERCENTAGE", TPSLPerc);
-                // console.log("OVERBOUGHT (Stoch, CCI, MFI, RSI) ", stochOB, cciOB, mfiOB, rsiOB);
-                // console.log("OVERSOLD (Stoch, CCI, MFI, RSI) ", stochOS, cciOS, mfiOS, rsiOS);
-                // console.log("BULL TREND BEARISH REVERSAL", bearishReversal);
-                // console.log("BEAR TREND BULLISH REVERSAL", bullishReversal);
-                // console.log("PRICE DIR", priceDir);
-                // console.log("LATEST PRICE", latestRate);
+                // REGISTER CURRENT OB AND OS
+                Analysis.#obos[symbol].ob = overBought;
+                Analysis.#obos[symbol].os = overSold;
 
+                // CONCLUDE ANALYSIS
+                Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"}.`, 5);
                 resolve(signal);
-
             }
             else {
                 Log.flow(`Analysis > ${symbol} > Error > Not enough rows.`, 5);
@@ -336,7 +393,36 @@ class Analysis {
         })
     }
 
-
+    /**
+     * Performs multilayering signal check
+     * Simple and static for now
+     * @param {string[]} signals 
+     * @param {boolean} long 
+     * @param {boolean} short 
+     * @param {string} desc 
+     * @returns {any}
+     */
+    static #correctSignals = (signals, long, short, desc) => {
+        let nlong = long;
+        let nshort = short;
+        if(signals.length < 2){
+            nlong = false;
+            nshort = false;
+        }
+        else{
+            if(signals.length > 2){
+                signals = signals.slice(signals.length - 2);
+            }
+            let signal = signals.join(" ");
+            if(long){
+                nlong = signal == "FHNP BDNP"
+            }
+            if(short){
+                nshort = signal == "FHNP FHJL"
+            }
+        }
+        return { nlong, nshort };
+    }
 
     /**
      * Holds most recent signal made on a token

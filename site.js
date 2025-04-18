@@ -50,7 +50,8 @@ class Site {
     static IN_STOCH_SIGNAL_PERIOD = parseInt(process.env.IN_STOCH_SIGNAL_PERIOD || "3") || 3;
     static IN_MAX_SIGNAL_HISTORY_LENGTH = parseInt(process.env.IN_MAX_SIGNAL_HISTORY_LENGTH || "5") || "5";
     static IN_ML_COLLECT_DATA = (process.env.IN_ML_COLLECT_DATA || "").toLowerCase() == "true";
-    static IN_ML_DATA_PATH = Site.IN_ML_COLLECT_DATA ? (path.join(rootDir(), `ml_data.json`)) : "";
+    static IN_ML_DATA_PATH = path.join(rootDir(), `ml_data.json`);
+    static IN_ML_CACHE_PATH = path.join(rootDir(), `ml_cache.json`);
 
     static BG_API_KEY = process.env.BG_API_KEY || "";
     static BG_API_SECRET = process.env.BG_API_SECRET || "";
