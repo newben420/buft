@@ -10,7 +10,7 @@ class Trader {
      * @param {Signal} signal 
      */
     static newSignal = (symbol, signal) => {
-        // TODO
+        // TODO - STREAMLINE ORDER PROCESS AND SUBSCRIBE TO ORDER WS ON START
     }
 
 }

@@ -4,7 +4,7 @@ const Site = require("../site");
 const BitgetEngine = require("./bitget");
 
 /**
- * Manages account used, its balance, PnL and Entry Amounts.
+ * Manages account used, its balance, and PnL
  */
 class Account {
 
@@ -17,8 +17,6 @@ class Account {
             try {
                 await BitgetEngine.addCallbackFunction("balance_update", Account.#updateBalance);
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "account");
-                // const bal = await BitgetEngine.getRestClient().getFuturesAccountAssets();
-                // console.log(bal);
                 resolve(true);
             } catch (error) {
                 Log.dev(error);
@@ -34,10 +32,28 @@ class Account {
     static #balance = 0;
 
     /**
+     * Starting available balance in margin coin
+     * @type {number}
+     */
+    static #initialBalance = 0;
+
+    /**
      * Get account balance in margin coin.
      * @returns {number}
      */
     static getBalance = () => Account.#balance;
+
+    /**
+     * Get current session's PnL in Margin Coin.
+     * @returns {number}
+     */
+    static getSessionPNL = () => Account.#balance - Account.#initialBalance;
+
+    /**
+     * Flag for when the first non-zero balance update is received
+     * @type {boolean}
+     */
+    static #initialBalanceUpdateDone = false;
 
 
     /**
@@ -46,6 +62,10 @@ class Account {
      */
     static #updateBalance = (bal) => {
         bal = parseFloat(bal) || 0;
+        if((!Account.#initialBalanceUpdateDone) && bal > 0){
+            Account.#initialBalance = bal;
+            Account.#initialBalanceUpdateDone = true;
+        }
         Account.#balance = bal;
         Log.flow(`Account > Balance > Update > ${Site.TK_MARGIN_COIN} ${FFF(bal)}`, 5);
     }
