@@ -32,6 +32,8 @@ class Site {
     static CL_ROWS = parseInt(process.env.CL_ROWS || "1000");
     static CL_MAX_ROWS_PER_FETCH = parseInt(process.env.CL_MAX_ROWS_PER_FETCH || "1000");
 
+    static TR_SIGNAL_BLACKLIST = (process.env.TR_SIGNAL_BLACKLIST || "").split(" ").filter(x => x.length > 0).map(x => x.replace(/_/g, " "));
+
     static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");
     static IN_BOOLEAN_THRESHOLD_MIN_RATIO = parseFloat(process.env.IN_BOOLEAN_THRESHOLD_MIN_RATIO || "0.5");

@@ -14,6 +14,7 @@ const {
     tweezertop, hangingman, shootingstar, bearishharamicross, morningstar, threewhitesoldiers, bullishengulfingpattern,
     morningdojistar, hammerpattern, dragonflydoji, bullishharami, bullishmarubozu, bullishharamicross, tweezerbottom,
 } = require("technicalindicators");
+const FFF = require("../lib/fff");
 
 /**
  * This analysis candlestick data and generates entry signals
@@ -383,7 +384,7 @@ class Analysis {
                 Analysis.#obos[symbol].os = overSold;
 
                 // CONCLUDE ANALYSIS
-                Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"}.`, 5);
+                Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"} | Price: ${FFF(latestRate)}`, 5);
                 resolve(signal);
             }
             else {

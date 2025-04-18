@@ -21,6 +21,7 @@ class Collector {
     static run = async () => {
         Log.flow(`Collector > Initialized.`);
         Site.FLOW_LOG_MAX_PRIORITY = 0;
+        Site.IN_ML_COLLECT_DATA = true;
         let usedCache = null;
         const getRawCache = () => {
             let cache = {};

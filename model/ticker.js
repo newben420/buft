@@ -5,6 +5,7 @@ const Site = require("../site");
 const Candlestick = require("./candlestick");
 const getTimeElapsed = require("../lib/get_time_elapsed");
 const Analysis = require("../engine/analysis");
+const Trader = require("../engine/trader");
 
 /**
  * This holds an added Ticker data
@@ -74,7 +75,10 @@ class Ticker {
                 Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Fetched ${l} row${l == 1 ? '' : 's'}.`, 5);
                 Analysis.run(this.symbol, this.candlestickData).then(signal => {
                     if (signal) {
-                        // TODO
+                        if(signal.long || signal.short){
+                            // SUBMIT SIGNAL TO TRADER
+                            Trader.newSignal(this.symbol, signal);
+                        }
                         conclude();
                     }
                     else {
