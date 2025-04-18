@@ -20,6 +20,7 @@ class Site {
     static EXIT_ON_UNHANDLED_REJECTION = (process.env.EXIT_ON_UNHANDLED_REJECTION || "").toLowerCase() == "true";
 
     static TK_PRODUCT_TYPE = process.env.TK_PRODUCT_TYPE || "";
+    static TK_MARGIN_COIN = process.env.TK_MARGIN_COIN || "USDT";
     static TK_AUTO_SYMBOLS = (process.env.TK_AUTO_SYMBOLS || "").split(" ").filter(x => x.length > 0);
     static TK_MAX = parseInt(process.env.TK_MAX || "100");
     static TK_GRANULARITY = process.env.TK_GRANULARITY || "1m";

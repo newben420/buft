@@ -1,3 +1,4 @@
+const Account = require("./account");
 const BitgetEngine = require("./bitget");
 const TickerEngine = require("./ticker");
 
@@ -7,7 +8,9 @@ const TickerEngine = require("./ticker");
  */
 const startEngine = () => {
     return new Promise(async (resolve, reject) => {
-        const started = (await BitgetEngine.start()) && (await TickerEngine.start());
+        const started = (await BitgetEngine.start()) && 
+        (await Account.start()) &&
+        (await TickerEngine.start());
         resolve(started);
     })
 }
