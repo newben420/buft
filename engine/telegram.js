@@ -38,6 +38,11 @@ class TelegramEngine {
     static #lastStatContent = "";
 
     /**
+     * @type {string}
+     */
+    static #lastOrdersContent = "";
+
+    /**
      * This generates content for the stats command.
      * @returns {any}
      */
@@ -100,10 +105,38 @@ class TelegramEngine {
                     }
                 ]
             ];
-            // TODO - generate orders with ways to close them using names or numbers
+            for (const order of orders) {
+                let moji = ((order.side == "short" && order.price < order.open_price) || (order.side == "long" && order.price > order.open_price)) ? "🟢" : "🔴";
+                let m = `${moji} *${order.side.toUpperCase()} ${order.symbol}*\n`;
+                m += `PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(order.gross_profit)}\n`;
+                m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
+                m += `Peak n Least ROE 💰 ${order.peak_roi.toFixed(2)}% ${order.least_roi.toFixed(2)}%\n`;
+                m += `Current Price 💰 ${order.price || order.open_price}\n`;
+                m += `Open Price 💰 ${order.open_price}\n`;
+                m += `Break Even Price 💰 ${order.breakeven_price}\n`;
+                m += `Liquidation Price 💰 ${order.liquidation_price}\n`;
+                const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price ) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price ) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
+                m += `liquidation ROE 💰 ${liquidationROE.toFixed(2)}%\n`;
+                m += `\n`;
+                message += m;
+                inline.push([{
+                    text: `Close ${order.symbol.replace(new RegExp(`${Site.TK_MARGIN_COIN}$`), "")}`,
+                    callback_data: `close_${order.symbol}`,
+                }]);
+            }
+            return { inline, message };
         }
         else {
-            return { message: `❌ No tickers available`, inline: [] };
+            return { message: `📈 *Active Orders* - ${getDateTime()}\n\n❌ No active orders at the moment`, inline: [
+                [
+                    {
+                        text: `♻️ Refresh`,
+                        callback_data: `refreshorders`,
+                    }
+                ]
+            ] };
         }
     }
 
@@ -220,6 +253,20 @@ class TelegramEngine {
                             }
                         });
                     }
+                    else if (/^\/orders$/.test(content)) {
+                        const { message, inline } = TelegramEngine.#getOrdersContent();
+                        if (message != TelegramEngine.#lastOrdersContent) {
+                            TelegramEngine.sendMessage(message, mid => {
+                                TelegramEngine.#lastOrdersContent = message;
+                            }, {
+                                parse_mode: "MarkdownV2",
+                                disable_web_page_preview: true,
+                                reply_markup: {
+                                    inline_keyboard: inline,
+                                }
+                            });
+                        }
+                    }
                     else if ((new RegExp(`^[A-Z0-9]+${Site.TK_MARGIN_COIN}$`)).test(content)) {
                         const symbol = content;
                         const done = await TickerEngine.addTicker(symbol);
@@ -255,6 +302,28 @@ class TelegramEngine {
                                 });
                                 if (done) {
                                     TelegramEngine.#lastStatContent = message;
+                                }
+                            }
+                        } catch (error) {
+                            Log.dev(error);
+                        }
+                    }
+                    if (callbackQuery.data == "refreshorders") {
+                        try {
+                            TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
+                            const { message, inline } = TelegramEngine.#getOrdersContent();
+                            if (message != TelegramEngine.#lastOrdersContent) {
+                                const done = await TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
+                                    chat_id: Site.TG_CHAT_ID,
+                                    message_id: callbackQuery.message.message_id,
+                                    parse_mode: "MarkdownV2",
+                                    disable_web_page_preview: true,
+                                    reply_markup: {
+                                        inline_keyboard: inline
+                                    }
+                                });
+                                if (done) {
+                                    TelegramEngine.#lastOrdersContent = message;
                                 }
                             }
                         } catch (error) {
@@ -336,15 +405,6 @@ class TelegramEngine {
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                         text: `✅ Longed ${symbol}`,
                                     });
-                                    TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
-                                        chat_id: Site.TG_CHAT_ID,
-                                        message_id: callbackQuery.message.message_id,
-                                        parse_mode: "MarkdownV2",
-                                        disable_web_page_preview: true,
-                                        reply_markup: {
-                                            inline_keyboard: inline
-                                        }
-                                    });
                                 }
                                 else {
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
@@ -368,19 +428,39 @@ class TelegramEngine {
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                         text: `✅ Shorted ${symbol}`,
                                     });
+                                }
+                                else {
+                                    TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
+                                        text: `❌ Could not short ${symbol}`,
+                                    });
+                                }
+                            } catch (error) {
+                                Log.dev(error);
+                            }
+                        }
+                        else if (content.startsWith("close ")) {
+                            let temp1 = content.split(" ");
+                            let symbol = temp1[1];
+                            try {
+                                const done = await Trader.closeOrder(symbol);
+                                if (done) {
+                                    let { message, inline } = TelegramEngine.#getOrdersContent();
+                                    TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
+                                        text: `✅ Closed ${symbol}`,
+                                    });
                                     TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
                                         chat_id: Site.TG_CHAT_ID,
                                         message_id: callbackQuery.message.message_id,
                                         parse_mode: "MarkdownV2",
                                         disable_web_page_preview: true,
                                         reply_markup: {
-                                            inline_keyboard: inline
+                                            inline_keyboard: inline.filter(x => !x[0].text.includes(symbol)),
                                         }
                                     });
                                 }
                                 else {
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
-                                        text: `❌ Could not short ${symbol}`,
+                                        text: `❌ Could not close ${symbol}`,
                                     });
                                 }
                             } catch (error) {

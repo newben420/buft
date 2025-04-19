@@ -71,6 +71,16 @@ class Order {
     size;
 
     /**
+     * @type {number}
+     */
+    price;
+
+    /**
+     * @type {number}
+     */
+    leverage;
+
+    /**
      * Object constructor
      * @param {string} symbol 
      * @param {number} open_time 
@@ -99,6 +109,8 @@ class Order {
         this.breakeven_price = 0;
         this.side = side;
         this.size = size;
+        this.price = 0;
+        this.leverage = 1;
     }
 }
 

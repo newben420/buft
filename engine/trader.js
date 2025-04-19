@@ -212,9 +212,10 @@ class Trader {
     /**
      * Streamlined close Order Method.
      * @param {string} symbol 
+     * @param {boolean} manual 
      * @returns {Promise<boolean>}
      */
-    static closeOrder = (symbol) => {
+    static closeOrder = (symbol, manual = false) => {
         return new Promise(async (resolve, reject) => {
             Log.flow(`Trader > Close > ${symbol}.`, 3);
             if (!Trader.#isClosing[symbol]) {
@@ -239,10 +240,14 @@ class Trader {
                         }
                         else {
                             Log.flow(`Trader > Close > ${symbol} > Error > "${ord.code} - ${ord.msg}".`, 3);
+                            if (manual) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${ord.code} - ${ord.msg}`);
                         }
                     } catch (error) {
                         Log.dev(error);
                         Log.flow(`Trader > Close > ${symbol} > Error > Unknown error.`, 3);
+                        if (error.body) {
+                            if (manual) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${error.body.code} - ${error.body.msg}`);
+                        }
                     }
                     finally {
                         delete Trader.#isClosing[symbol];
@@ -251,6 +256,7 @@ class Trader {
                 }
                 else {
                     Log.flow(`Trader > Close > ${symbol} > Error > No active order for this ticker.`, 3);
+                    if (manual) Trader.sendMessage(`❌ *${symbol} Close Order*\n\nNo active order for this ticker`);
                     delete Trader.#isClosing[symbol];
                     resolve(false);
                 }
@@ -348,7 +354,8 @@ class Trader {
                             const liquidPrice = parseFloat(pos.liquidationPrice) || 0;
                             const breakEvenPrice = parseFloat(pos.breakEvenPrice) || 0;
                             const leverage = parseFloat(pos.leverage) || 1;
-                            Trader.#positionUpdate(symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage);
+                            const price = parseFloat(pos.markPrice) || 0;
+                            Trader.#positionUpdate(symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage, price);
                         }
                     }
                     resolve(true);
@@ -450,10 +457,10 @@ class Trader {
                 order.close_price = price;
                 order.close_time = ts;
                 order.gross_profit = profit;
-                const netProfit = (price - order.breakeven_price) / order.breakeven_price * 100;
+                const netProfit = ((price - order.breakeven_price) / order.breakeven_price * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)}\nNet Profit 💰 ${netProfit.toFixed(2)}%`);
+                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
                 Trader.#popOrder(symbol);
             }
         }
@@ -468,19 +475,24 @@ class Trader {
      * @param {number} liquidPrice 
      * @param {number} breakEvenPrice 
      * @param {number} leverage 
+     * @param {number} price
      */
-    static #positionUpdate = (symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage) => {
+    static #positionUpdate = (symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage, price = 0) => {
         Log.flow(`Trader > Position > ${symbol} > ${Site.TK_MARGIN_COIN} ${FFF(pnl)} (${roi.toFixed(2)}%)`, 2);
         const order = Trader.#orders.filter(x => x.symbol == symbol && x.side == side)[0];
         if (order) {
+            if(price > 0 && price){
+                order.price = price;
+            }
             order.breakeven_price = breakEvenPrice;
             order.liquidation_price = liquidPrice;
+            order.leverage = leverage;
             order.gross_profit = pnl;
             order.roi = roi;
             if (order.peak_roi == 0 || roi > order.peak_roi) {
                 order.peak_roi = roi;
             }
-            if (order.least_roi == 0 || roi > order.least_roi) {
+            if (order.least_roi == 0 || roi < order.least_roi) {
                 order.least_roi = roi;
             }
             // TODO compute order closing strategy
