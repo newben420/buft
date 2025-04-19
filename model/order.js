@@ -78,7 +78,32 @@ class Order {
     /**
      * @type {number}
      */
+    take_profit_price;
+
+    /**
+     * @type {boolean}
+     */
+    take_profit_isset;
+
+    /**
+     * @type {boolean}
+     */
+    stop_loss_isset;
+
+    /**
+     * @type {number}
+     */
+    stop_loss_price;
+
+    /**
+     * @type {number}
+     */
     leverage;
+
+    /**
+     * @type {string}
+     */
+    close_reason;
 
     /**
      * Object constructor
@@ -111,6 +136,11 @@ class Order {
         this.size = size;
         this.price = 0;
         this.leverage = 1;
+        this.take_profit_price = 0;
+        this.stop_loss_price = 0;
+        this.take_profit_isset = false;
+        this.stop_loss_isset = false;
+        this.close_reason = "Manual";
     }
 }
 

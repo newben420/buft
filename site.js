@@ -43,6 +43,11 @@ class Site {
     static TR_POS_UPDATE_INTERVAL_MS = parseInt(process.env.TR_POS_UPDATE_INTERVAL_MS || "1000") || 1000;
     static TR_MARGIN_MODE = process.env.TR_MARGIN_MODE || "isolated";
     static TR_CAPITAL_RATIO_FOR_TRADE = parseFloat(process.env.TR_CAPITAL_RATIO_FOR_TRADE || "1") || 1;
+    static TR_TAKE_PROFIT = (process.env.TR_TAKE_PROFIT || "").toUpperCase();
+    static TR_STOP_LOSS = (process.env.TR_STOP_LOSS || "").toUpperCase();
+    static TR_PEAK_DROP_MIN_DROP = (process.env.TR_PEAK_DROP_MIN_DROP || "0") || 0;
+    static TR_PROFIT_ORDER_MAX_DURATION_MS = parseInt(process.env.TR_PROFIT_ORDER_MAX_DURATION_MS || "0") || 0;
+    static TR_LOSS_ORDER_MAX_DURATION_MS = parseInt(process.env.TR_LOSS_ORDER_MAX_DURATION_MS || "0") || 0;
 
     static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");

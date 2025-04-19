@@ -477,7 +477,7 @@ class Trader {
                 const netProfit = ((price - order.breakeven_price) / order.breakeven_price * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
+                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nReason 💬 ${order.close_reason}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
                 Trader.#popOrder(symbol);
                 const min = Trader.#manualOrders.indexOf(symbol);
                 if (min >= 0) {
@@ -517,6 +517,50 @@ class Trader {
                 order.least_roi = roi;
             }
 
+            if (!order.take_profit_isset) {
+                let tp = 0;
+                if (Site.TR_TAKE_PROFIT == "TP" && Trader.#trailingStopLoss[symbol] && leverage) {
+                    tp = Trader.#trailingStopLoss[symbol] * leverage;
+                }
+                else if (Site.TR_TAKE_PROFIT == "VOL" && Trader.#volatility[symbol] && leverage) {
+                    tp = Trader.#volatility[symbol] * leverage;
+                }
+                else {
+                    const vl = parseFloat(Site.TR_TAKE_PROFIT) || 0;
+                    if (vl > 0) {
+                        tp = vl;
+                    }
+                }
+                if (tp > 0) {
+                    // TAKE PROFIT IS BEING USED
+                    order.take_profit_price = (((tp * order.breakeven_price) / 100) * (order.side == "long" ? 1 : -1)) + order.breakeven_price;
+                }
+                order.take_profit_isset = true;
+            }
+
+            if (!order.stop_loss_isset) {
+                let sl = 0;
+                if (Site.TR_STOP_LOSS == "SL" && Trader.#trailingStopLoss[symbol] && leverage) {
+                    sl = Trader.#trailingStopLoss[symbol] * leverage * -1;
+                }
+                else if (Site.TR_STOP_LOSS == "VOL" && Trader.#volatility[symbol] && leverage) {
+                    sl = Trader.#volatility[symbol] * leverage * -1;
+                }
+                else {
+                    const vl = parseFloat(Site.TR_STOP_LOSS) || 0;
+                    if (vl > 0) {
+                        sl = vl * -1;
+                    }
+                }
+                if (sl < 0) {
+                    // STOP LOSS IS BEING USED
+                    order.stop_loss_price = (((sl * order.breakeven_price) / 100) * (order.side == "long" ? 1 : -1)) + order.breakeven_price;
+                    // ADJUST STOP LOSS PRICE BASED ON LIQUIDATION PRICE
+                    order.stop_loss_price = order.side == "long" ? (Math.max(order.stop_loss_price, order.liquidation_price)) : (Math.min(order.stop_loss_price, order.liquidation_price));
+                }
+                order.stop_loss_isset = true;
+            }
+
             // EXIT STRATEGY
             if (Trader.#manualOrders.indexOf(symbol) == -1) {
                 const ROE = order.roi;
@@ -524,11 +568,68 @@ class Trader {
                 const LeasetROE = order.least_roi || ROE;
                 const BreakEvenROE = ((((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
                 const LiquidationROE = ((((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
-                if(ROE >= BreakEvenROE){
+                const PnLBreakEven = ((((order.price - order.breakeven_price) / order.breakeven_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
+                const PnLOpen = ((((order.price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
+
+                if (ROE >= BreakEvenROE) {
                     // ORDER IS IN THE PROFITABLE ZONE
+                    if (order.take_profit_isset && order.take_profit_price ** price) {
+                        // TAKE PROFIT (CONTENTMENT) STRATEGY IS BEING USED
+                        if ((order.side == "long" && price >= order.take_profit_price) || (order.side == "short" && price <= order.take_profit_price)) {
+                            // TAKE PROFIT CONDITION HAS BEEN FULFILLED
+                            // CLOSE ORDER
+                            order.close_reason = "Take Profit";
+                            Trader.closeOrder(symbol);
+                        }
+                        else {
+                            // TAKE PROFIT CONDITION IS NOT FULFILLED
+                        }
+                    }
+                    else if (Site.TR_PEAK_DROP_MIN_DROP) {
+                        // PEAK DROP (GREEDY) STRATEGY IS BEING USED
+                        if (((PeakROE - BreakEvenROE) - ROE) >= Site.TR_PEAK_DROP_MIN_DROP) {
+                            // PEAK DROP CONDITION HAS BEEN FULFILLED
+                            // CLOSE ORDER
+                            order.close_reason = "Peak Drop";
+                            Trader.closeOrder(symbol);
+                        }
+                        else {
+                            // PEAK DROP CONDITION IS NOT FULFILLED
+                        }
+                    }
+                    else if ((Date.now() - order.open_time) >= Site.TR_PROFIT_ORDER_MAX_DURATION_MS && Site.TR_PROFIT_ORDER_MAX_DURATION_MS) {
+                        // ORDER HAS EXPIRED WHILE STILL PROFITABLE
+                        // CLOSE ORDER
+                        order.close_reason = "Profitable Expiration";
+                        Trader.closeOrder(symbol);
+                    }
+                    else {
+                        // NOTHING ELSE TO DO HERE
+                    }
                 }
-                else{
+                else {
                     // ORDER IS IN THE NON PROFITABLE ZONE
+                    if (order.stop_loss_isset && order.stop_loss_price) {
+                        // STOP LOSS IS BEING USED
+                        if ((order.side == "long" && price <= order.stop_loss_price) || (order.side == "short" && price >= order.stop_loss_price)) {
+                            // STOP LOSS CONDITION HAS BEEN FULFILLED
+                            // CLOSE ORDER
+                            order.close_reason = "Stop Loss";
+                            Trader.closeOrder(symbol);
+                        }
+                        else {
+                            // STOP LOSS CONDITION IS NOT FULFILLED
+                        }
+                    }
+                    else if ((Date.now() - order.open_time) >= Site.TR_LOSS_ORDER_MAX_DURATION_MS && Site.TR_LOSS_ORDER_MAX_DURATION_MS) {
+                        // ORDER HAS EXPIRED WHILE STILL LOSING
+                        // CLOSE ORDER
+                        order.close_reason = "Lossy Expiration";
+                        Trader.closeOrder(symbol);
+                    }
+                    else {
+                        // NOTHING ELSE TO DO HERE
+                    }
                 }
             }
         }
