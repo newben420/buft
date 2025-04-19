@@ -13,7 +13,7 @@ class Order {
     /**
      * @type {number}
      */
-    open_price;    
+    open_price;
 
     /**
      * @type {number}
@@ -94,7 +94,7 @@ class Order {
         open_price,
         side,
         size,
-    ){
+    ) {
         this.symbol = symbol;
         this.open_time = open_time;
         this.open_price = open_price;

@@ -154,6 +154,17 @@ class Trader {
                                             Trader.#volatility[symbol] = signal.volatilityPerc;
                                             Trader.#trailingStopLoss[symbol] = signal.tpslPerc;
                                             success = true;
+                                            if (manual) {
+                                                if (Trader.#manualOrders.indexOf(symbol) == -1) {
+                                                    Trader.#manualOrders.push(symbol);
+                                                }
+                                            }
+                                            else {
+                                                const min = Trader.#manualOrders.indexOf(symbol);
+                                                if (min >= 0) {
+                                                    Trader.#manualOrders.splice(min, 1);
+                                                }
+                                            }
                                         }
                                         else {
                                             Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
@@ -409,6 +420,12 @@ class Trader {
     }
 
     /**
+     * This holds symbols of orders that were created manually
+     * @type {string[]}
+     */
+    static #manualOrders = []
+
+    /**
      * Called when orders are created.
      * @param {string} symbol 
      * @param {"long"|"short"} side 
@@ -462,6 +479,10 @@ class Trader {
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
                 Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
                 Trader.#popOrder(symbol);
+                const min = Trader.#manualOrders.indexOf(symbol);
+                if (min >= 0) {
+                    Trader.#manualOrders.splice(min, 1);
+                }
             }
         }
     }
@@ -481,7 +502,7 @@ class Trader {
         Log.flow(`Trader > Position > ${symbol} > ${Site.TK_MARGIN_COIN} ${FFF(pnl)} (${roi.toFixed(2)}%)`, 2);
         const order = Trader.#orders.filter(x => x.symbol == symbol && x.side == side)[0];
         if (order) {
-            if(price > 0 && price){
+            if (price > 0 && price) {
                 order.price = price;
             }
             order.breakeven_price = breakEvenPrice;
@@ -495,7 +516,21 @@ class Trader {
             if (order.least_roi == 0 || roi < order.least_roi) {
                 order.least_roi = roi;
             }
-            // TODO compute order closing strategy
+
+            // EXIT STRATEGY
+            if (Trader.#manualOrders.indexOf(symbol) == -1) {
+                const ROE = order.roi;
+                const PeakROE = order.peak_roi || ROE;
+                const LeasetROE = order.least_roi || ROE;
+                const BreakEvenROE = ((((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
+                const LiquidationROE = ((((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage) || 0;
+                if(ROE >= BreakEvenROE){
+                    // ORDER IS IN THE PROFITABLE ZONE
+                }
+                else{
+                    // ORDER IS IN THE NON PROFITABLE ZONE
+                }
+            }
         }
     }
 

@@ -10,11 +10,11 @@ const Trader = require("./trader");
  */
 const startEngine = () => {
     return new Promise(async (resolve, reject) => {
-        const started = (await BitgetEngine.start()) && 
-        (await TelegramEngine.start()) &&
-        (await Account.start()) &&
-        (await Trader.start()) &&
-        (await TickerEngine.start());
+        const started = (await BitgetEngine.start()) &&
+            (await TelegramEngine.start()) &&
+            (await Account.start()) &&
+            (await Trader.start()) &&
+            (await TickerEngine.start());
         resolve(started);
     })
 }

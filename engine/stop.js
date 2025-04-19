@@ -9,12 +9,12 @@ const TelegramEngine = require("./telegram");
 const stopEngine = () => {
     return new Promise(async (resolve, reject) => {
         await Analysis.stop();
-        if(Site.TG_SEND_STOP){
+        if (Site.TG_SEND_STOP) {
             TelegramEngine.sendMessage(`😴 *${Site.TITLE}* is going to sleep`, r => {
                 resolve(true);
             });
         }
-        else{
+        else {
             resolve(true);
         }
     })

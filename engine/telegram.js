@@ -115,8 +115,8 @@ class TelegramEngine {
                 m += `Open Price 💰 ${order.open_price}\n`;
                 m += `Break Even Price 💰 ${order.breakeven_price}\n`;
                 m += `Liquidation Price 💰 ${order.liquidation_price}\n`;
-                const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price ) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
-                const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price ) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
                 m += `liquidation ROE 💰 ${liquidationROE.toFixed(2)}%\n`;
                 m += `\n`;
@@ -129,14 +129,16 @@ class TelegramEngine {
             return { inline, message };
         }
         else {
-            return { message: `📈 *Active Orders* - ${getDateTime()}\n\n❌ No active orders at the moment`, inline: [
-                [
-                    {
-                        text: `♻️ Refresh`,
-                        callback_data: `refreshorders`,
-                    }
+            return {
+                message: `📈 *Active Orders* - ${getDateTime()}\n\n❌ No active orders at the moment`, inline: [
+                    [
+                        {
+                            text: `♻️ Refresh`,
+                            callback_data: `refreshorders`,
+                        }
+                    ]
                 ]
-            ] };
+            };
         }
     }
 

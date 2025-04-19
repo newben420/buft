@@ -183,7 +183,7 @@ class Analysis {
                 const csd = { open, close, high, low };
 
                 const priceDir = computeArithmeticDirection(close);
-                if(!Analysis.#obos[symbol]){
+                if (!Analysis.#obos[symbol]) {
                     Analysis.#obos[symbol] = {};
                 }
 
@@ -252,7 +252,7 @@ class Analysis {
                 const bearishReversal = (abandonedbaby(csd) || bearishengulfingpattern(csd) ||
                     darkcloudcover(csd) || piercingline(csd) || eveningstar(csd) || eveningdojistar(csd) ||
                     threeblackcrows(csd) || gravestonedoji(csd) || bearishharami(csd) || bearishmarubozu(csd) ||
-                    tweezertop(csd) || hangingman(csd) || shootingstar(csd) || bearishharamicross(csd)) && 
+                    tweezertop(csd) || hangingman(csd) || shootingstar(csd) || bearishharamicross(csd)) &&
                     Analysis.#obos[symbol].ob &&
                     clearDirection(close.slice(close.length - 3)) <= 0;
                 const bullishReversal = (abandonedbaby(csd) || bullishengulfingpattern(csd) ||
@@ -327,11 +327,11 @@ class Analysis {
                 const signals = Analysis.#getMultilayeredHistory(symbol);
 
                 // CORRECT SIGNALS HERE
-                const {nlong, nshort } = Analysis.#correctSignals(signals, long, short, description);
+                const { nlong, nshort } = Analysis.#correctSignals(signals, long, short, description);
                 signal.long = nlong;
                 signal.short = nshort;
 
-                if((long || short) && !nlong && !nshort){
+                if ((long || short) && !nlong && !nshort) {
                     signal.description = "Corrected Signal";
                 }
 
@@ -406,19 +406,19 @@ class Analysis {
     static #correctSignals = (signals, long, short, desc) => {
         let nlong = long;
         let nshort = short;
-        if(signals.length < 2){
+        if (signals.length < 2) {
             nlong = false;
             nshort = false;
         }
-        else{
-            if(signals.length > 2){
+        else {
+            if (signals.length > 2) {
                 signals = signals.slice(signals.length - 2);
             }
             let signal = signals.join(" ");
-            if(long){
+            if (long) {
                 nlong = signal == "FHNP BDNP"
             }
-            if(short){
+            if (short) {
                 nshort = signal == "FHNP FHJL"
             }
         }
