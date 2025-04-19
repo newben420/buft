@@ -10,6 +10,7 @@ const fs = require("fs");
 /**
  * This is responsible for hastened data collection for multilayering
  * It is independent of the normal working of the server
+ * This is a standalone script
  */
 class Collector {
 

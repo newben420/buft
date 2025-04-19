@@ -65,6 +65,8 @@ class Site {
     static IN_ML_DATA_PATH = path.join(rootDir(), `ml_data.json`);
     static IN_ML_CACHE_PATH = path.join(rootDir(), `ml_cache.json`);
 
+    static FI_SAVE_PATH = process.env.FI_SAVE_PATH || "";
+
     static TG_TOKEN = process.env.TG_TOKEN ?? "";
     static TG_CHAT_ID = parseInt(process.env.TG_CHAT_ID ?? "0");
     static TG_POLLING = (process.env.TG_POLLING || "").toLowerCase() == "true";

@@ -454,7 +454,7 @@ class TelegramEngine {
                                         parse_mode: "MarkdownV2",
                                         disable_web_page_preview: true,
                                         reply_markup: {
-                                            inline_keyboard: inline.filter(x => !x[0].text.includes(symbol)),
+                                            inline_keyboard: inline.filter(x => !x[0].text.includes(symbol.replace(new RegExp(`${Site.TK_MARGIN_COIN}$`), ""))),
                                         }
                                     });
                                 }
