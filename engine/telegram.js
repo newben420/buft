@@ -49,7 +49,7 @@ class TelegramEngine {
         const trader = Trader.isEnabled();
         message += `Trader Enabled ${trader ? `🟢 Yes` : `🔴 No`}\n`;
         message += `Tickers 💲 ${formatNumber(TickerEngine.getLength())}\n`;
-        message += `Orders 📈 ${formatNumber(Trader.getOrdersLength())}\n`;
+        message += `Active Orders 📈 ${formatNumber(Trader.getOrdersLength())}\n`;
         message += `Balance 💰 ${Site.TK_MARGIN_COIN} ${FFF(Account.getBalance())}\n`;
         if (Trader.getOrdersLength() == 0) {
             message += `Session PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(Account.getSessionPNL())}\n`;
@@ -76,6 +76,36 @@ class TelegramEngine {
      * @type {any}
      */
     static #lastTickersMessageID = null;
+
+    /**
+    * This generates content for the orders command.
+    * @returns {any}
+    */
+    static #getOrdersContent = () => {
+
+        const orders = Trader.getAllOrders();
+        if (orders.length > 0) {
+            /**
+             * @type {string}
+             */
+            let message = `📈 *Active Orders* - ${getDateTime()}\n\n`;
+            /**
+             * @type {TelegramBot.InlineKeyboardButton[][]}
+             */
+            let inline = [
+                [
+                    {
+                        text: `♻️ Refresh`,
+                        callback_data: `refreshorders`,
+                    }
+                ]
+            ];
+            // TODO - generate orders with ways to close them using names or numbers
+        }
+        else {
+            return { message: `❌ No tickers available`, inline: [] };
+        }
+    }
 
     /**
     * This generates content for the tickers command.

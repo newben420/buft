@@ -45,6 +45,12 @@ class Trader {
     static getOrdersLength = () => Trader.#orders.length;
 
     /**
+     * Get all orders.
+     * @returns {Order[]}
+     */
+    static getAllOrders = () => Trader.#orders.map(x => x);
+
+    /**
      * Returns true if the ticker has an active order.
      * @param {string} symbol 
      * @returns {boolean}
@@ -271,6 +277,9 @@ class Trader {
                 if (recovered && Trader.#orders.length > 0) {
                     const l = Trader.#orders.length;
                     Log.flow(`Trader > Recover > ${l} order${l == 1 ? "" : "s"} registered.`, 0);
+                    setTimeout(() => {
+                        Trader.sendMessage(`🥳 *${Site.TITLE}* has recovered ${l} order${l == 1 ? "" : "s"}`);
+                    }, 1000);
                 }
                 Trader.#getUpdatedPositions();
                 resolve(true);
