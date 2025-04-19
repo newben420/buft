@@ -1,5 +1,6 @@
 const Account = require("./account");
 const BitgetEngine = require("./bitget");
+const TelegramEngine = require("./telegram");
 const TickerEngine = require("./ticker");
 const Trader = require("./trader");
 
@@ -12,7 +13,8 @@ const startEngine = () => {
         const started = (await BitgetEngine.start()) && 
         (await Account.start()) &&
         (await Trader.start()) &&
-        (await TickerEngine.start());
+        (await TickerEngine.start()) &&
+        (await TelegramEngine.start());
         resolve(started);
     })
 }

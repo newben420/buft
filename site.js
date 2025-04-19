@@ -42,6 +42,7 @@ class Site {
     static TR_SIGNAL_BLACKLIST = (process.env.TR_SIGNAL_BLACKLIST || "").split(" ").filter(x => x.length > 0).map(x => x.replace(/_/g, " "));
     static TR_POS_UPDATE_INTERVAL_MS = parseInt(process.env.TR_POS_UPDATE_INTERVAL_MS || "1000") || 1000;
     static TR_MARGIN_MODE = process.env.TR_MARGIN_MODE || "isolated";
+    static TR_CAPITAL_RATIO_FOR_TRADE = parseFloat(process.env.TR_CAPITAL_RATIO_FOR_TRADE || "1") || 1;
 
     static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");
@@ -63,6 +64,16 @@ class Site {
     static IN_ML_COLLECT_DATA = (process.env.IN_ML_COLLECT_DATA || "").toLowerCase() == "true";
     static IN_ML_DATA_PATH = path.join(rootDir(), `ml_data.json`);
     static IN_ML_CACHE_PATH = path.join(rootDir(), `ml_cache.json`);
+
+    static TG_TOKEN = process.env.TG_TOKEN ?? "";
+    static TG_CHAT_ID = parseInt(process.env.TG_CHAT_ID ?? "0");
+    static TG_POLLING = (process.env.TG_POLLING || "").toLowerCase() == "true";
+    static TG_SEND_START = (process.env.TG_SEND_START || "").toLowerCase() == "true";
+    static TG_SEND_STOP = (process.env.TG_SEND_STOP || "").toLowerCase() == "true";
+    static TG_SEND_CREATE_ORDER = (process.env.TG_SEND_CREATE_ORDER || "").toLowerCase() == "true";
+    static TG_WH_SECRET_TOKEN = process.env.TG_WH_SECRET_TOKEN ?? "";
+    static TG_MESSAGE_DURATION_MS = parseInt(process.env.TG_MESSAGE_DURATION_MS || "5000") || 5000;
+    static TG_BOT_URL = process.env.TG_BOT_URL ?? "";
 
     static BG_API_KEY = process.env.BG_API_KEY || "";
     static BG_API_SECRET = process.env.BG_API_SECRET || "";

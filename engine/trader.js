@@ -39,16 +39,25 @@ class Trader {
     static #orders = [];
 
     /**
+     * Get number of active orders.
+     * @returns {number}
+     */
+    static getOrdersLength = () => Trader.#orders.length;
+
+    /**
+     * Returns true if the ticker has an active order.
+     * @param {string} symbol 
+     * @returns {boolean}
+     */
+    static tickerHasOrder = (symbol) => Trader.#orders.findIndex(x => x.symbol == symbol) >= 0;
+
+    /**
     * Is called when there is a new signal received
     * @param {string} symbol 
     * @param {Signal} signal 
     */
     static newSignal = (symbol, signal) => {
-        const index = Trader.#orders.findIndex(x => x.symbol == symbol);
-        if (Trader.#enabled && Site.TR_SIGNAL_BLACKLIST.indexOf(signal.description) == -1 && index < 0 && Trader.#orders.length < Site.TR_GRID_LENGTH) {
-            // Signal can be executed
-            Trader.openOrder(symbol, signal);
-        }
+        Trader.openOrder(symbol, signal);
     }
 
     /**
@@ -74,93 +83,120 @@ class Trader {
      * Streamlined open order method
      * @param {string} symbol 
      * @param {Signal} signal 
+     * @param {boolean} manual 
      * @returns {Promise<boolean>}
      */
-    static openOrder = (symbol, signal) => {
+    static openOrder = (symbol, signal, manual = false) => {
         return new Promise(async (resolve, reject) => {
-            if (!Trader.#isOpening) {
-                Trader.#isOpening = true;
-                const balance = Account.getBalance();
-                const capital = Math.min(Site.TR_MAX_CAPITAL_MCOIN, Math.max(0, balance / (Site.TR_GRID_LENGTH / Trader.#orders.length)));
-                Log.flow(`Trader > Open > ${symbol} > ${signal.long ? "LONG" : "SHORT"} > Balance: ${FFF(balance)} | Capital: ${FFF(capital)}.`, 3);
-                if (capital > 0) {
-                    // Capital is tangible
-                    let success = false;
-                    try {
-                        const config = await Promise.all([
-                            BitgetEngine.getRestClient().getFuturesContractConfig({
-                                productType: Site.TK_PRODUCT_TYPE,
-                                symbol: symbol,
-                            }),
-                            BitgetEngine.getRestClient().getFuturesTicker({
-                                productType: Site.TK_PRODUCT_TYPE,
-                                symbol: symbol,
-                            }),
-                        ]);
-                        if (config[0].msg == "success" && config[0].data && Array.isArray(config[0].data) && config[1].msg == "success" && config[1].data && Array.isArray(config[1].data)) {
-                            const cfg = config[0].data[0];
-                            const tkr = config[1].data[0];
-                            const price = parseFloat(tkr.lastPr) || 0;
-                            const mul = parseFloat(cfg.sizeMultiplier) || 0;
-                            const amt = Math.floor((capital / price) / mul) * mul;
-                            const minAmt = parseFloat(cfg.minTradeNum) || 0;
-                            // const valid = amt >= minAmt
-                            Log.flow(`Trader > Open > ${symbol} > ${cfg.baseCoin} ${FFF(amt)}.`, 3);
-                            const cannotTrade = ["maintain", "limit_open", "restrictedAPI", "off"].indexOf(cfg.symbolStatus) != -1;
-                            if (cannotTrade) {
-                                Log.flow(`Trader > Open > ${symbol} > Error > '${cfg.symbol}' status.`, 3);
-                            }
-                            else if (amt < minAmt) {
-                                Log.flow(`Trader > Open > ${symbol} > Error > ${cfg.baseCoin} ${FFF(amt)} is less than minimum of ${cfg.baseCoin} ${FFF(minAmt)}.`, 3);
-                            }
-                            else {
-                                // valid
-                                const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
-                                    symbol: symbol,
+            const index = Trader.#orders.findIndex(x => x.symbol == symbol);
+            if ((manual ? true : Trader.#enabled) && Site.TR_SIGNAL_BLACKLIST.indexOf(signal.description) == -1 && index < 0 && Trader.#orders.length < Site.TR_GRID_LENGTH) {
+                // Signal can be executed
+                if (!Trader.#isOpening) {
+                    Trader.#isOpening = true;
+                    const balance = Account.getBalance();
+                    const capital = Math.min(Site.TR_MAX_CAPITAL_MCOIN, Math.max(0, balance / (Site.TR_GRID_LENGTH - Trader.#orders.length)));
+                    Log.flow(`Trader > Open > ${symbol} > ${signal.long ? "LONG" : "SHORT"} > Balance: ${FFF(balance)} | Capital: ${FFF(capital)}.`, 3);
+                    if (capital > 0) {
+                        // Capital is tangible
+                        let success = false;
+                        try {
+                            const config = await Promise.all([
+                                BitgetEngine.getRestClient().getFuturesContractConfig({
                                     productType: Site.TK_PRODUCT_TYPE,
-                                    marginMode: Site.TR_MARGIN_MODE,
-                                    marginCoin: Site.TK_MARGIN_COIN,
-                                    side: signal.long ? "buy" : "sell",
-                                    tradeSide: "open",
-                                    orderType: "market",
-                                    size: `${amt}`,
-                                });
-                                if (order.msg == "success") {
-                                    Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
-                                    Trader.#volatility[symbol] = signal.volatilityPerc;
-                                    Trader.#trailingStopLoss[symbol] = signal.tpslPerc;
-                                    success = true;
+                                    symbol: symbol,
+                                }),
+                                BitgetEngine.getRestClient().getFuturesTicker({
+                                    productType: Site.TK_PRODUCT_TYPE,
+                                    symbol: symbol,
+                                }),
+                            ]);
+                            if (config[0].msg == "success" && config[0].data && Array.isArray(config[0].data) && config[1].msg == "success" && config[1].data && Array.isArray(config[1].data)) {
+                                const cfg = config[0].data[0];
+                                const tkr = config[1].data[0];
+                                const leverage = (parseFloat(Site.TR_MARGIN_MODE == "isolated" ? (signal.long ? Site.TK_LEVERAGE_LONG : Site.TK_LEVERAGE_SHORT) : Site.TK_LEVERAGE_CROSS)) || 0;
+                                const notionalUSDT = capital * leverage;
+                                const price = parseFloat(tkr.lastPr) || 0;
+                                const mul = parseFloat(cfg.sizeMultiplier) || 0;
+                                const amt = Math.floor(((notionalUSDT / price) * Site.TR_CAPITAL_RATIO_FOR_TRADE) / mul) * mul;
+                                const minAmt = parseFloat(cfg.minTradeNum) || 0;
+                                const minUSDT = parseFloat(cfg.minTradeUSDT) || 0;
+                                if (notionalUSDT >= minUSDT) {
+                                    Log.flow(`Trader > Open > ${symbol} > ${cfg.baseCoin} ${FFF(amt)}.`, 3);
+                                    const cannotTrade = ["maintain", "limit_open", "restrictedAPI", "off"].indexOf(cfg.symbolStatus) != -1;
+                                    if (cannotTrade) {
+                                        Log.flow(`Trader > Open > ${symbol} > Error > '${cfg.symbol}' status.`, 3);
+                                        if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n'${cfg.symbol}' status`);
+                                    }
+                                    else if (amt < minAmt) {
+                                        Log.flow(`Trader > Open > ${symbol} > Error > ${cfg.baseCoin} ${FFF(amt)} is less than minimum of ${cfg.baseCoin} ${FFF(minAmt)}.`, 3);
+                                        if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${cfg.baseCoin} ${FFF(amt)} is less than minimum of ${cfg.baseCoin} ${FFF(minAmt)}`);
+                                    }
+                                    else {
+                                        // valid
+                                        const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
+                                            symbol: symbol,
+                                            productType: Site.TK_PRODUCT_TYPE,
+                                            marginMode: Site.TR_MARGIN_MODE,
+                                            marginCoin: Site.TK_MARGIN_COIN,
+                                            side: signal.long ? "buy" : "sell",
+                                            tradeSide: "open",
+                                            orderType: "market",
+                                            size: `${amt}`,
+                                        });
+                                        if (order.msg == "success") {
+                                            Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
+                                            Trader.#volatility[symbol] = signal.volatilityPerc;
+                                            Trader.#trailingStopLoss[symbol] = signal.tpslPerc;
+                                            success = true;
+                                        }
+                                        else {
+                                            Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
+                                            if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${order.code} - ${order.msg}`);
+                                        }
+                                    }
                                 }
                                 else {
-                                    Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
+                                    Log.flow(`Trader > Open > ${symbol} > Error > Insufficient notional ${Site.TK_MARGIN_COIN} ${FFF(notionalUSDT)} for minimum of ${Site.TK_MARGIN_COIN} ${FFF(minUSDT)}.`, 3);
+                                    if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nInsufficient notional ${Site.TK_MARGIN_COIN} ${FFF(notionalUSDT)} for minimum of ${Site.TK_MARGIN_COIN} ${FFF(minUSDT)}`);
                                 }
                             }
-                        }
-                        else {
-                            Log.flow(`Trader > Open > ${symbol} > Error > "${config[0].code} - ${config[0].msg}" and "${config[1].code} - ${config[1].msg}".`, 3);
-                        }
+                            else {
+                                Log.flow(`Trader > Open > ${symbol} > Error > "${config[0].code} - ${config[0].msg}" and "${config[1].code} - ${config[1].msg}".`, 3);
+                                if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n*CONFIG RES* ${config[0].code} - ${config[0].msg}\n*TICKER RES* ${config[1].code} - ${config[1].msg}`);
+                            }
 
-                    } catch (error) {
-                        Log.dev(error);
-                        Log.flow(`Trader > Open > ${symbol} > Error > Unknown error.`, 3);
+                        } catch (error) {
+                            Log.dev(error);
+                            Log.flow(`Trader > Open > ${symbol} > Error > Unknown error.`, 3);
+                            if (error.body) {
+                                if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${error.body.code} - ${error.body.msg}`);
+                            }
+                        }
+                        finally {
+                            Trader.#isOpening = false;
+                            resolve(success);
+                        }
                     }
-                    finally {
+                    else {
+                        Log.flow(`Trader > Open > ${symbol} > Error > Insufficient capital.`, 3);
+                        if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nCapital is not tangible`);
                         Trader.#isOpening = false;
-                        resolve(success);
+                        resolve(false);
                     }
                 }
                 else {
-                    Log.flow(`Trader > Open > ${symbol} > Error > Insufficient capital.`, 3);
-                    Trader.#isOpening = false;
+                    if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nAnother trade is currently being opened`);
                     resolve(false);
                 }
             }
             else {
+                if (manual) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nTrade does not qualify`);
                 resolve(false);
             }
         })
-
     }
+
+    static sendMessage = () => { };
 
     /**
      * @type {Record<string, boolean>}
@@ -250,7 +286,6 @@ class Trader {
      * @param {Order} order 
      */
     static #pushOrder = (order) => {
-        console.log(order);
         const id = Trader.#orders.findIndex(x => x.symbol == order.symbol);
         if (id >= 0) {
             Trader.#orders.splice(id, 1, order);
@@ -370,10 +405,14 @@ class Trader {
     static #createOrder = (symbol, side, tradeSide, ts, OID, COID, size) => {
         Log.flow(`Trader > ${symbol} > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Created.`, 1);
         if (tradeSide == "open") {
-            // TODO: send out notification if necessary
+            if (Site.TG_SEND_CREATE_ORDER) {
+                Trader.sendMessage(`⏺️  *${side.toUpperCase()} Open Order Created*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}`);
+            }
         }
         else if (tradeSide == "close") {
-            // TODO: send out notification if necessary
+            if (Site.TG_SEND_CREATE_ORDER) {
+                Trader.sendMessage(`⏺️  *${side.toUpperCase()} Close Order Created*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}`);
+            }
         }
     }
 
@@ -393,8 +432,8 @@ class Trader {
         if (tradeSide == "open") {
             const order = new Order(symbol, ts, price, side, size);
             Log.flow(`Trader > ${symbol} > Opened > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled.`, 1);
-            // TODO - SEND OUT NOTIFICATION
             Trader.#pushOrder(order);
+            Trader.sendMessage(`🚀  *Opened ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}`);
         }
         else if (tradeSide == "close") {
             const order = Trader.#orders.filter(x => x.symbol == symbol && x.side == side)[0];
@@ -405,7 +444,7 @@ class Trader {
                 const netProfit = (price - order.breakeven_price) / order.breakeven_price * 100;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                // TODO - SEND OUT NOTIFICATION TO UI
+                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)}\nNet Profit 💰 ${netProfit.toFixed(2)}%`);
                 Trader.#popOrder(symbol);
             }
         }

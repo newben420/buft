@@ -14,27 +14,41 @@ class TickerEngine {
     static #tickers = {};
 
     /**
+     * Get tickers' length
+     * @returns {number}
+     */
+    static getLength = () => Object.keys(TickerEngine.#tickers).length;
+
+    /**
+     * Get all current tickers.
+     * @returns {Ticker[]}
+     */
+    static getAllTickers = () => Object.keys(TickerEngine.#tickers).map(x => TickerEngine.#tickers[x]);
+
+    /**
      * Deletes a ticker
      * @param {string} symbol 
      * @returns {Promise<boolean>}
      */
-    static deleteTicker = async (symbol) => {
-        if (TickerEngine.#tickers[symbol]) {
-            Log.flow(`TickerEngine > Delete > ${symbol}.`, 2);
-            const destroyed = await TickerEngine.#tickers[symbol].destroy();
-            if (destroyed) {
-                delete TickerEngine.#tickers[symbol];
-                Log.flow(`TickerEngine > Delete > ${symbol} > Successful.`, 2);
-                resolve(true);
+    static deleteTicker = (symbol) => {
+        return new Promise(async (resolve, reject) => {
+            if (TickerEngine.#tickers[symbol]) {
+                Log.flow(`TickerEngine > Delete > ${symbol}.`, 2);
+                const destroyed = await TickerEngine.#tickers[symbol].destroy();
+                if (destroyed) {
+                    delete TickerEngine.#tickers[symbol];
+                    Log.flow(`TickerEngine > Delete > ${symbol} > Successful.`, 2);
+                    resolve(true);
+                }
+                else {
+                    Log.flow(`TickerEngine > Delete > ${symbol} > Failed.`, 2);
+                    resolve(false);
+                }
             }
             else {
-                Log.flow(`TickerEngine > Delete > ${symbol} > Failed.`, 2);
                 resolve(false);
             }
-        }
-        else {
-            resolve(true);
-        }
+        })
     };
 
     /**
