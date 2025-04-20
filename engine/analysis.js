@@ -182,7 +182,8 @@ class Analysis {
                 const latestRate = close[close.length - 1] || 0;
                 const csd = { open, close, high, low };
 
-                const priceDir = computeArithmeticDirection(close);
+                const priceDir = compute1ExpDirection(close);
+                // const priceDir = computeArithmeticDirection(close);
                 if (!Analysis.#obos[symbol]) {
                     Analysis.#obos[symbol] = {};
                 }
@@ -421,6 +422,12 @@ class Analysis {
             if (short) {
                 nshort = signal == "FHNP FHJL"
             }
+        }
+        if(long && Site.TR_SIGNAL_BLACKLIST.indexOf(desc) >= 0){
+            nlong = false;
+        }
+        if(short && Site.TR_SIGNAL_BLACKLIST.indexOf(desc) >= 0){
+            nshort = false;
         }
         return { nlong, nshort };
     }

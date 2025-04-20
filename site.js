@@ -48,6 +48,7 @@ class Site {
     static TR_PEAK_DROP_MIN_DROP = (process.env.TR_PEAK_DROP_MIN_DROP || "0") || 0;
     static TR_PROFIT_ORDER_MAX_DURATION_MS = parseInt(process.env.TR_PROFIT_ORDER_MAX_DURATION_MS || "0") || 0;
     static TR_LOSS_ORDER_MAX_DURATION_MS = parseInt(process.env.TR_LOSS_ORDER_MAX_DURATION_MS || "0") || 0;
+    static TR_EXCLUDE_MANUAL_TRADES_FROM_EXIT = (process.env.TR_EXCLUDE_MANUAL_TRADES_FROM_EXIT || "").toLowerCase() == "true";
 
     static IN_MIN_CONFIDENCE = parseFloat(process.env.IN_MIN_CONFIDENCE || "0") || 0;
     static IN_DIRECTION_MAX_LENGTH = parseInt(process.env.IN_DIRECTION_MAX_LENGTH || "10");

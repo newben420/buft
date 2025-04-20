@@ -9,6 +9,7 @@ const Trader = require('./trader');
 const TickerEngine = require('./ticker');
 const Account = require('./account');
 const Signal = require('../model/signal');
+const BitgetEngine = require('./bitget');
 
 class TelegramEngine {
 
@@ -59,6 +60,14 @@ class TelegramEngine {
         if (Trader.getOrdersLength() == 0) {
             message += `Session PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(Account.getSessionPNL())}\n`;
         }
+        message += `Margin Mode ⚙️ ${Site.TR_MARGIN_MODE.replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())}\n`;
+        if (Site.TR_MARGIN_MODE == "isolated") {
+            message += `Long Leverage ✖️ ${Site.TK_LEVERAGE_LONG}\n`;
+            message += `Short Leverage ✖️ ${Site.TK_LEVERAGE_SHORT}\n`;
+        }
+        else {
+            message += `Cross Leverage ✖️ ${Site.TK_LEVERAGE_CROSS}\n`;
+        }
         /**
          * @type {TelegramBot.InlineKeyboardButton[][]}
          */
@@ -108,9 +117,11 @@ class TelegramEngine {
             for (const order of orders) {
                 let moji = ((order.side == "short" && order.price < order.open_price) || (order.side == "long" && order.price > order.open_price)) ? "🟢" : "🔴";
                 let m = `${moji} *${order.side.toUpperCase()} ${order.symbol}*\n`;
+                m += `⏱️ ${getTimeElapsed(order.open_time, Date.now())}\n`;
                 m += `PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(order.gross_profit)}\n`;
                 m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
-                m += `Peak n Least ROE 💰 ${order.peak_roi.toFixed(2)}% ${order.least_roi.toFixed(2)}%\n`;
+                m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
+                m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
                 m += `Current Price 💰 ${order.price || order.open_price}\n`;
                 m += `Open Price 💰 ${order.open_price}\n`;
                 m += `Break Even Price 💰 ${order.breakeven_price}\n`;
@@ -279,8 +290,66 @@ class TelegramEngine {
                             TelegramEngine.sendMessage(`❌ Could not add *${symbol}* to tickers`);
                         }
                     }
+                    else if (/^lever=[0-9]+$/i.test(content)) {
+                        try {
+                            const isolated = Site.TR_MARGIN_MODE == "isolated";
+                            let symbols = TickerEngine.getAllTickers().map(x => x.symbol);
+                            const leverage = content.replace(/^lever=/i, "").trim();
+                            /**
+                             * @type {string[][]}
+                             */
+                            let grouped = symbols.reduce((a, _, i) => (i % (isolated ? 2 : 5) === 0 ? [...a, symbols.slice(i, i + (isolated ? 2 : 5))] : a), []);
+                            for (const group of grouped) {
+                                let tasks = [];
+                                for (const symbol of group) {
+                                    if (isolated) {
+                                        tasks.push(BitgetEngine.getRestClient().setFuturesLeverage({
+                                            marginCoin: Site.TK_MARGIN_COIN,
+                                            symbol: symbol,
+                                            productType: Site.TK_PRODUCT_TYPE,
+                                            holdSide: "long",
+                                            leverage: leverage,
+                                        }));
+                                        tasks.push(BitgetEngine.getRestClient().setFuturesLeverage({
+                                            marginCoin: Site.TK_MARGIN_COIN,
+                                            symbol: symbol,
+                                            productType: Site.TK_PRODUCT_TYPE,
+                                            holdSide: "short",
+                                            leverage: leverage,
+                                        }));
+                                    }
+                                    else {
+                                        tasks.push(BitgetEngine.getRestClient().setFuturesLeverage({
+                                            marginCoin: Site.TK_MARGIN_COIN,
+                                            symbol: symbol,
+                                            productType: Site.TK_PRODUCT_TYPE,
+                                            leverage: leverage,
+                                        }));
+                                    }
+                                }
+                                let done = await Promise.all(tasks);
+                                await new Promise(res => setTimeout(res, 1000));
+                            }
+                            if (isolated) {
+                                Site.TK_LEVERAGE_LONG = leverage;
+                                Site.TK_LEVERAGE_SHORT = leverage;
+                            }
+                            else {
+                                Site.TK_LEVERAGE_CROSS = leverage;
+                            }
+                            TelegramEngine.sendMessage(`✅ Leverages for all tickers in current margin mode updated to ${leverage}`);
+                        } catch (error) {
+                            Log.dev(error);
+                            if (error.body) {
+                                TelegramEngine.sendMessage(`❌ Could not update leverage for registered tickers\n\n${error.body.code} - ${error.body.msg}`);
+                            }
+                            else {
+                                TelegramEngine.sendMessage(`❌ Could not update leverage for registered tickers`);
+                            }
+                        }
+                    }
                     else {
-                        TelegramEngine.sendMessage(`😔 *${Site.TITLE}* could not understand your last message`);
+                        TelegramEngine.sendMessage(`😔 *${Site.TITLE}* could not understand your last message\n\nSend a ticker symbol e.g. BTCUSDT to add it to tickers\n\nSend "lever=[value]" e.g. lever=20 to change leverages for all tickers in current margin mode`);
                     }
                 }
             });

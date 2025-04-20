@@ -1,4 +1,5 @@
 const FFF = require("../lib/fff");
+const getTimeElapsed = require("../lib/get_time_elapsed");
 const Log = require("../lib/log");
 const Order = require("../model/order");
 const Signal = require("../model/signal");
@@ -115,11 +116,16 @@ class Trader {
                                     productType: Site.TK_PRODUCT_TYPE,
                                     symbol: symbol,
                                 }),
+                                BitgetEngine.getRestClient().getFuturesAccountAsset({
+                                    marginCoin: Site.TK_MARGIN_COIN,
+                                    productType: Site.TK_PRODUCT_TYPE,
+                                    symbol: symbol,
+                                })
                             ]);
-                            if (config[0].msg == "success" && config[0].data && Array.isArray(config[0].data) && config[1].msg == "success" && config[1].data && Array.isArray(config[1].data)) {
+                            if (config[0].msg == "success" && config[0].data && Array.isArray(config[0].data) && config[1].msg == "success" && config[1].data && Array.isArray(config[1].data) && config[2].msg == "success") {
                                 const cfg = config[0].data[0];
                                 const tkr = config[1].data[0];
-                                const leverage = (parseFloat(Site.TR_MARGIN_MODE == "isolated" ? (signal.long ? Site.TK_LEVERAGE_LONG : Site.TK_LEVERAGE_SHORT) : Site.TK_LEVERAGE_CROSS)) || 0;
+                                const leverage = (parseFloat(Site.TR_MARGIN_MODE == "isolated" ? (signal.long ? config[2].data.isolatedLongLever : config[2].data.isolatedShortLever) : config[2].data.crossedMarginLeverage)) || 0;
                                 const notionalUSDT = capital * leverage;
                                 const price = parseFloat(tkr.lastPr) || 0;
                                 const mul = parseFloat(cfg.sizeMultiplier) || 0;
@@ -344,7 +350,14 @@ class Trader {
                     marginCoin: Site.TK_MARGIN_COIN,
                 });
                 if (res.msg == "success" && res.data && Array.isArray(res.data)) {
+                    /**
+                     * @type {string[]}
+                     */
+                    let activeTickers = [];
                     for (const pos of res.data) {
+                        if(activeTickers.indexOf(pos.symbol) == -1){
+                            activeTickers.push(pos.symbol);
+                        }
                         if (recovery) {
                             // make all positions into orders
                             const symbol = pos.symbol;
@@ -369,6 +382,12 @@ class Trader {
                             Trader.#positionUpdate(symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage, price);
                         }
                     }
+                    /**
+                     * @type {string[]}
+                     */
+                    Trader.#orders.map(x => x.symbol).filter(x => activeTickers.indexOf(x) == -1).forEach(x => {
+                        Trader.#popOrder(x);
+                    });
                     resolve(true);
                 }
                 else {
@@ -477,7 +496,7 @@ class Trader {
                 const netProfit = ((price - order.breakeven_price) / order.breakeven_price * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nReason 💬 ${order.close_reason}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
+                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nReason 💬 ${order.close_reason}\nDuration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
                 Trader.#popOrder(symbol);
                 const min = Trader.#manualOrders.indexOf(symbol);
                 if (min >= 0) {
@@ -562,7 +581,7 @@ class Trader {
             }
 
             // EXIT STRATEGY
-            if (Trader.#manualOrders.indexOf(symbol) == -1) {
+            if (Trader.#manualOrders.indexOf(symbol) == -1 ? true : (!Site.TR_EXCLUDE_MANUAL_TRADES_FROM_EXIT)) {
                 const ROE = order.roi;
                 const PeakROE = order.peak_roi || ROE;
                 const LeasetROE = order.least_roi || ROE;
