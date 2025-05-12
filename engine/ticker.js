@@ -2,6 +2,7 @@ const Log = require("../lib/log");
 const Ticker = require("../model/ticker");
 const Site = require("../site");
 const BitgetEngine = require("./bitget");
+let Analysis = null;
 
 /**
  * Manages ticker
@@ -38,6 +39,10 @@ class TickerEngine {
                 if (destroyed) {
                     delete TickerEngine.#tickers[symbol];
                     Log.flow(`TickerEngine > Delete > ${symbol} > Successful.`, 2);
+                    if (!Analysis) {
+                        Analysis = require("./analysis");
+                    }
+                    Analysis.removeTicker(symbol);
                     resolve(true);
                 }
                 else {
@@ -70,54 +75,60 @@ class TickerEngine {
                 }
                 else {
                     try {
-                        const ticker = await BitgetEngine.getRestClient().getFuturesTicker({
-                            productType: Site.TK_PRODUCT_TYPE,
-                            symbol: symbol,
-                        });
-                        if ((ticker.data ? (ticker.data.length > 0) : false) && ticker.msg == "success") {
-                            const data = ticker.data[0];
-                            const levy = await Promise.all(Site.TR_MARGIN_MODE == "isolated" ? [
-                                BitgetEngine.getRestClient().setFuturesLeverage({
-                                    symbol: data.symbol,
-                                    productType: Site.TK_PRODUCT_TYPE,
-                                    marginCoin: Site.TK_MARGIN_COIN,
-                                    holdSide: "long",
-                                    leverage: Site.TK_LEVERAGE_LONG,
-                                }),
-                                BitgetEngine.getRestClient().setFuturesLeverage({
-                                    symbol: data.symbol,
-                                    productType: Site.TK_PRODUCT_TYPE,
-                                    marginCoin: Site.TK_MARGIN_COIN,
-                                    holdSide: "short",
-                                    leverage: Site.TK_LEVERAGE_SHORT,
-                                }),
-                            ] : [
-                                BitgetEngine.getRestClient().setFuturesLeverage({
-                                    symbol: data.symbol,
-                                    productType: Site.TK_PRODUCT_TYPE,
-                                    marginCoin: Site.TK_MARGIN_COIN,
-                                    leverage: Site.TK_LEVERAGE_CROSS,
-                                })
-                            ]);
-                            const passed = levy.filter(x => x.msg == "success");
-                            if (passed.length == levy.length) {
-                                TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
-                                Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
-                                resolve(true);
+                        if (Site.PRODUCTION) {
+                            const ticker = await BitgetEngine.getRestClient().getFuturesTicker({
+                                productType: Site.TK_PRODUCT_TYPE,
+                                symbol: symbol,
+                            });
+                            if ((ticker.data ? (ticker.data.length > 0) : false) && ticker.msg == "success") {
+                                const data = ticker.data[0];
+                                const levy = await Promise.all(Site.TR_MARGIN_MODE == "isolated" ? [
+                                    BitgetEngine.getRestClient().setFuturesLeverage({
+                                        symbol: data.symbol,
+                                        productType: Site.TK_PRODUCT_TYPE,
+                                        marginCoin: Site.TK_MARGIN_COIN,
+                                        holdSide: "long",
+                                        leverage: Site.TK_LEVERAGE_LONG,
+                                    }),
+                                    BitgetEngine.getRestClient().setFuturesLeverage({
+                                        symbol: data.symbol,
+                                        productType: Site.TK_PRODUCT_TYPE,
+                                        marginCoin: Site.TK_MARGIN_COIN,
+                                        holdSide: "short",
+                                        leverage: Site.TK_LEVERAGE_SHORT,
+                                    }),
+                                ] : [
+                                    BitgetEngine.getRestClient().setFuturesLeverage({
+                                        symbol: data.symbol,
+                                        productType: Site.TK_PRODUCT_TYPE,
+                                        marginCoin: Site.TK_MARGIN_COIN,
+                                        leverage: Site.TK_LEVERAGE_CROSS,
+                                    })
+                                ]);
+                                const passed = levy.filter(x => x.msg == "success");
+                                if (passed.length == levy.length) {
+                                    Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
+                                    TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
+                                    resolve(true);
+                                }
+                                else {
+                                    Log.flow(`TickerEngine > Add > ${symbol} > Error > Could not set leverage.`, 2);
+                                    resolve(false);
+                                }
                             }
                             else {
-                                TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
-                                Log.flow(`TickerEngine > Add > ${symbol} > Error > Could not set leverage.`, 2);
+                                Log.flow(`TickerEngine > Add > ${symbol} > Error > Ticker not found.`, 2);
                                 resolve(false);
                             }
                         }
                         else {
-                            Log.flow(`TickerEngine > Add > ${symbol} > Error > Ticker not found.`, 2);
-                            resolve(false);
+                            Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
+                            TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
+                            resolve(true);
                         }
                     } catch (error) {
                         Log.dev(error);
-                        Log.flow(`TickerEngine > Add > ${symbol} > Error > Unknown error.`, 2);
+                        Log.flow(`TickerEngine > Add > ${symbol} > Error > ${error.body ? `${error.body.code} - ${error.body.msg}` : ` Unknown error`}.`, 2);
                         resolve(false);
                     }
                 }

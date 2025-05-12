@@ -48,7 +48,7 @@ class Ticker {
             }
             else {
                 const timeToSchedule = scheduledTS - now;
-                Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Next iteration in ${getTimeElapsed(now, scheduledTS)}.`, 5);
+                Log.flow(`Candlestick > ${this.symbol} > Next iteration in ${getTimeElapsed(now, scheduledTS)}.`, 5);
                 if (this.dataTimeoutObject) {
                     clearTimeout(this.dataTimeoutObject);
                 }
@@ -57,7 +57,7 @@ class Ticker {
                 }, timeToSchedule);
             }
         }
-        Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Initialized.`, 5);
+        Log.flow(`Candlestick > ${this.symbol} > Initialized.`, 5);
         BitgetEngine.getRestClient().getFuturesCandles({
             granularity: Site.TK_GRANULARITY,
             productType: Site.TK_PRODUCT_TYPE,
@@ -72,33 +72,33 @@ class Ticker {
                     this.candlestickData = this.candlestickData.slice(this.candlestickData.length - Site.TK_MAX_ROWS);
                 }
                 const l = d.length;
-                Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Fetched ${l} row${l == 1 ? '' : 's'}.`, 5);
+                Log.flow(`Candlestick > ${this.symbol} > Fetched ${l} row${l == 1 ? '' : 's'}.`, 5);
                 Analysis.run(this.symbol, this.candlestickData).then(signal => {
                     if (signal) {
-                        if(signal.long || signal.short){
+                        if (signal.long || signal.short) {
                             // SUBMIT SIGNAL TO TRADER
                             Trader.newSignal(this.symbol, signal);
                         }
                         conclude();
                     }
                     else {
-                        Log.flow(`TickerEngine > Analysis > ${this.symbol} > No signal.`, 5);
+                        Log.flow(`Analysis > ${this.symbol} > No signal.`, 5);
                         conclude();
                     }
                 }).catch(err => {
                     Log.dev(err);
-                    Log.flow(`TickerEngine > Analysis > ${this.symbol} > Error > Unknown.`, 5);
+                    Log.flow(`Analysis > ${this.symbol} > Error > ${err.body ? `${err.body.code} - ${err.body.msg}` : `Unknwown`}.`, 5);
                     conclude();
                 });
             }
             else {
-                Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Error > ${data.code} - ${data.msg}.`, 5);
+                Log.flow(`Candlestick > ${this.symbol} > Error > ${data.code} - ${data.msg}.`, 5);
                 this.candlestickData = [];
                 conclude();
             }
         }).catch(err => {
             Log.dev(err);
-            Log.flow(`TickerEngine > Candlestick > ${this.symbol} > Error > Unknwown.`, 5);
+            Log.flow(`Candlestick > ${this.symbol} > Error > ${err.body ? `${err.body.code} - ${err.body.msg}` : `Unknwown`}.`, 5);
             this.candlestickData = [];
             conclude();
         });
@@ -108,7 +108,7 @@ class Ticker {
      * destroys the ticker internally
      * @returns {Promise<boolean>}
      */
-    destroy(){
+    destroy() {
         return new Promise((resolve, reject) => {
             if (this.dataTimeoutObject) {
                 clearTimeout(this.dataTimeoutObject);

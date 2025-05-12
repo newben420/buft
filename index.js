@@ -26,7 +26,7 @@ app.use(
 
 const startTime = getDateTime(Date.now());
 app.get("/", (req, res) => {
-    res.type("txt").send(`${Site.TITLE} running since ${startTime} UTC`);
+    res.type("txt").send(`${Site.TITLE} running since ${startTime} ${process.env.TZ || "UTC"}`);
 });
 
 app.post("/webhook", (req, res) => {

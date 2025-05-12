@@ -1,5 +1,5 @@
 .env
 .env.*
 node_modules
-ml_data.json
-ml_cache.json
+**/ml_**.json
+analysis

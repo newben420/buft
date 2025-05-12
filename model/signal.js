@@ -22,7 +22,12 @@ class Signal {
     /**
      * @type {number}
      */
-    tpslPerc;
+    tpsl;
+
+    /**
+     * @type {number}
+     */
+    markPrice;
 
     /**
      * Object constructor
@@ -30,14 +35,16 @@ class Signal {
      * @param {boolean} long
      * @param {string} description
      * @param {number} volPerc
-     * @param {number} tpslPerc
+     * @param {number} tpsl
+     * @param {number} mark
      */
-    constructor(short, long, description, volPerc, tpslPerc) {
+    constructor(short, long, description, volPerc, tpsl, mark) {
         this.short = short;
         this.long = long;
         this.description = description;
         this.volatilityPerc = volPerc;
-        this.tpslPerc = tpslPerc;
+        this.tpsl = tpsl;
+        this.markPrice = mark;
     }
 }
 

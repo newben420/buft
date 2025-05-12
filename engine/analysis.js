@@ -1,155 +1,72 @@
-const booleanThreshold = require("../lib/boolean_threshold");
-const { compute1ExpDirection, computeArithmeticDirection, clearDirection } = require("../lib/direction");
 const Log = require("../lib/log");
 const Candlestick = require("../model/candlestick");
 const Multilayered = require("../model/multilayered");
 const Signal = require("../model/signal");
 const Site = require("../site");
 const fs = require("fs");
-const strategy = require("./strategy.json");
 const {
-    MACD, PSAR, Stochastic, bullish, bearish, VWAP, ADL, ATR, AwesomeOscillator, ROC, ForceIndex,
-    TRIX, ADX, BollingerBands, CCI, MFI, RSI, abandonedbaby, bearishengulfingpattern, darkcloudcover,
-    piercingline, eveningstar, eveningdojistar, threeblackcrows, gravestonedoji, bearishharami, bearishmarubozu,
-    tweezertop, hangingman, shootingstar, bearishharamicross, morningstar, threewhitesoldiers, bullishengulfingpattern,
-    morningdojistar, hammerpattern, dragonflydoji, bullishharami, bullishmarubozu, bullishharamicross, tweezerbottom,
+    MACD, PSAR, Stochastic, bullish, bearish, VWAP, ADL, ATR, AwesomeOscillator,
+    TRIX, ADX, CCI, MFI, RSI, darkcloudcover,
+    piercingline, eveningstar, threeblackcrows,
+    tweezertop, hangingman, shootingstar,
+    IchimokuCloud,
+    StochasticRSI,
+    SMA,
+    EMA,
+    WMA,
+    threewhitesoldiers,
+    morningstar,
+    hammerpattern,
+    tweezerbottom,
 } = require("technicalindicators");
 const FFF = require("../lib/fff");
+const booleanConsolidator = require("../lib/boolean_consolidator");
+const calculateUtf8FileSize = require("../lib/file_size");
+const getDateTime = require("../lib/get_date_time");
+
+let TelegramEngine = null;
 
 /**
  * This analysis candlestick data and generates entry signals
  */
 class Analysis {
     /**
-     * Holds take profit data for a token
-     * @type {Record<string, number[]>}
+     * Holds previous entry values per token
+     * @type {Record<string, boolean[]>}
      */
-    static #tp = {};
+    static #isEntryBull = {};
 
     /**
-     * Holds volatility data for a token
-     * @type {Record<string, number[]>}
+     * Holds previous entry values per token
+     * @type {Record<string, boolean[]>}
      */
-    static #vol = {};
+    static #isEntryBear = {};
 
     /**
-     * This applies strategy to compute long and short signals
-     * @param {Record<string, any>} state 
-     * @returns {Record<string, any>}
-     */
-    static #computeMatrix = (state) => {
-        const {
-            overallBull,
-            overallBear,
-            supportBull,
-            supportBear,
-            goodBuy,
-            goodSell,
-            overBought,
-            overSold,
-            bearishReversal,
-            bullishReversal,
-            adxStrong,
-            adxWeak,
-            priceDir
-        } = state;
-        const result = Object.keys(strategy).map(result => {
-            let score = 0;
-            let maxScore = 0;
-            let strat = strategy[result];
-            for (const rule of strat.rules) {
-                maxScore += rule.weight;
-                const actual = state[rule.var];
-                if (rule.hasOwnProperty("value")) {
-                    if (actual === rule.value) score += rule.weight;
-                } else if (rule.hasOwnProperty("greaterThan")) {
-                    if (actual > rule.greaterThan) score += rule.weight;
-                } else if (rule.hasOwnProperty("lessThan")) {
-                    if (actual < rule.lessThan) score += rule.weight;
-                }
-            }
-            const confidence = score / maxScore * 100;
-            if (score >= strat.threshold && confidence >= Site.IN_MIN_CONFIDENCE) {
-                return {
-                    signal: result,
-                    score,
-                    confidence,
-                };
-            }
-            return null;
-        }).filter(Boolean).sort((a, b) => {
-            if (a.confidence !== b.confidence) {
-                return b.confidence - a.confidence;
-            }
-            return b.score - a.score;
-        });
-        const description = (result[0] || {}).signal || "No Signal";
-        const possibleLong = description.toLowerCase().includes("long");
-        const possibleShort = description.toLowerCase().includes("short");
-        const long = possibleLong && (!possibleShort);
-        const short = possibleShort && (!possibleLong);
-        return { long, short, description, result };
-    }
-
-    /**
-     * Holds collected data if collection is enabled.
-     * @type {any}
-     */
-    static #collectedData = {}
-
-    /**
-     * Collects data for external multilayering analysis if collection is enabled.
+     * Remove ticker
      * @param {string} symbol 
-     * @param {number} rate 
-     * @param {string} signal 
-     * @param {boolean} long 
-     * @param {boolean} short 
-     * @param {number} vol 
-     * @param {number} tpsl 
-     * @param {string} desc 
-     * @param {any} extra 
      */
-    static #collector = (
-        symbol,
-        rate,
-        signal,
-        long,
-        short,
-        vol,
-        tpsl,
-        desc,
-        extra
-    ) => {
-        if (!Analysis.#collectedData[symbol]) {
-            Analysis.#collectedData[symbol] = [];
-        }
-        if (signal) {
-            Analysis.#collectedData[symbol].push({
-                rate,
-                signal,
-                long,
-                short,
-                vol,
-                tpsl,
-                desc,
-                extra,
-            });
-        }
+    static removeTicker = (symbol) => {
+        delete Analysis.#latestSignal[symbol];
+        delete Analysis.#multilayered[symbol];
+        delete Analysis.#multilayeredHistory[symbol];
+        delete Analysis.#isEntryBear[symbol];
+        delete Analysis.#isEntryBull[symbol];
     }
 
     /**
-     * Gracious stop function
+     * Gracious exit function
      * @returns {Promise<boolean>}
      */
     static stop = () => {
         return new Promise((resolve, reject) => {
             try {
-                if (Object.keys(Analysis.#collectedData).length > 0) {
-                    fs.writeFileSync(Site.IN_ML_DATA_PATH, JSON.stringify(Analysis.#collectedData, null, "\t"));
-                    Log.flow(`Collector > Data collection saved to ${Site.IN_ML_DATA_PATH}`, 0);
+                if (Site.IN_CFG.ML_COL_DATA && (!Site.PRODUCTION)) {
+                    fs.writeFileSync(Site.IN_ML_DATA_PATH, JSON.stringify(Analysis.collectedData, null, "\t"));
+                    Log.flow("Analysis > Data collection saved.");
                 }
             } catch (error) {
-                Log.dev(error);
+
             }
             finally {
                 resolve(true);
@@ -158,10 +75,97 @@ class Analysis {
     }
 
     /**
-     * Keeps track of immediate past overbought and oversold values of each ticker
-     * @type {Record<string, Record<string, boolean>}
+     * Keeps track of last time a collected file was sent
+     * @type {number}
      */
-    static #obos = {}
+    static #lastChecked = 0;
+
+    /**
+     * Holds collected data if collection is enabled.
+     * @type {any}
+     */
+    static collectedData = {}
+
+    /**
+     * 
+     * @param {string} symbol 
+     * @param {number} rate 
+     * @param {string} signal 
+     * @param {boolean} long 
+     * @param {boolean} short 
+     * @param {number} sl 
+     * @param {string} desc 
+     * @param {any} extra
+     */
+    static #collector = (
+        symbol,
+        rate,
+        signal,
+        long,
+        short,
+        sl,
+        desc,
+        extra
+    ) => {
+        if (Site.IN_CFG.ML_COL_DATA) {
+            if (!Analysis.collectedData[symbol]) {
+                Analysis.collectedData[symbol] = [];
+            }
+            if (signal) {
+                Analysis.collectedData[symbol].push({
+                    rate,
+                    signal,
+                    long,
+                    short,
+                    sl,
+                    desc,
+                    extra,
+                });
+                if ((Date.now() - Analysis.#lastChecked) >= (Site.IN_CFG.COOL_DOWN_MS || 60000)) {
+                    try {
+                        if (!TelegramEngine) {
+                            TelegramEngine = require("./telegram");
+                        }
+                        const content = JSON.stringify(Analysis.collectedData);
+                        const size = calculateUtf8FileSize(content);
+                        if (size >= (Site.IN_CFG.COL_MX_FILSIZ || 2000000)) {
+                            Analysis.sendCollected();
+                        }
+                    } catch (error) {
+                        Log.dev(error);
+                    }
+                }
+            }
+        }
+    }
+
+    static #sending = false;
+
+    static sendCollected = async () => {
+        try {
+            if (!Analysis.#sending) {
+                Analysis.#sending = true;
+                if (!TelegramEngine) {
+                    TelegramEngine = require("./telegram");
+                }
+                const content = JSON.stringify(Analysis.collectedData);
+                if (content.length > 0) {
+                    let caption = `*Collected Candlestick Analysis Data* - ${getDateTime()}`;
+                    const d = new Date();
+                    let filename = `${d.getFullYear().toString().padStart(2, '0')}${(d.getMonth() + 1).toString().padStart(2, '0')}${(d.getDate()).toString().padStart(2, '0')}${d.getHours().toString().padStart(2, '0')}${d.getMinutes().toString().padStart(2, '0')}${d.getSeconds().toString().padStart(2, '0')}.json`;
+                    const done = await TelegramEngine.sendStringAsJSONFile(content, caption, filename);
+                    if (done) {
+                        Analysis.collectedData = {};
+                    }
+                }
+                Analysis.#sending = false;
+            }
+        } catch (error) {
+            Log.dev(error);
+        }
+    }
+
+    static #lastTS = 0;
 
     /**
      * Runs analysis on candlestic kdata
@@ -172,8 +176,12 @@ class Analysis {
     static run = (symbol, data) => {
         return new Promise((resolve, reject) => {
             Log.flow(`Analysis > ${symbol} > Initialized.`, 5);
-            if (data.length >= Site.AS_MIN_ROWS) {
-                const ts = Date.now();
+            if (data.length >= (Site.IN_CFG.MN_DATA_LEN || 10)) {
+                let ts = Date.now();
+                if (ts == Analysis.#lastTS) {
+                    ts = ts + 1;
+                }
+                Analysis.#lastTS = ts;
                 const open = data.map(x => x.open);
                 const high = data.map(x => x.high);
                 const low = data.map(x => x.low);
@@ -182,210 +190,474 @@ class Analysis {
                 const latestRate = close[close.length - 1] || 0;
                 const csd = { open, close, high, low };
 
-                const priceDir = compute1ExpDirection(close);
-                // const priceDir = computeArithmeticDirection(close);
-                if (!Analysis.#obos[symbol]) {
-                    Analysis.#obos[symbol] = {};
+                let cache = {
+                    PSR: null,
+                    PSR_BULL: null,
+                    PSR_BEAR: null,
+                    PSR_SL: null,
+                    MCD: null,
+                    MCD_BULL: null,
+                    MCD_BEAR: null,
+                    ICH: null,
+                    ICH_BULL: null,
+                    ICH_BEAR: null,
+                    ICH_SL: null,
+                    BLL_BULL: null,
+                    BLL_BEAR: null,
+                    BLL_BEAR: null,
+                    SMA_BULL: null,
+                    SMA_BEAR: null,
+                    EMA_BULL: null,
+                    EMA_BEAR: null,
+                    WMA_BULL: null,
+                    WMA_BEAR: null,
+                    VWP_BULL: null,
+                    VWP_BEAR: null,
+                    AOS_BULL: null,
+                    AOS_BEAR: null,
+                    TRX_BULL: null,
+                    TRX_BEAR: null,
+                    STRONG: null,
+                    STC_OB: null,
+                    STC_OS: null,
+                    RSI_OB: null,
+                    RSI_OS: null,
+                    CCI_OB: null,
+                    CCI_OS: null,
+                    MFI_OB: null,
+                    MFI_OS: null,
+                    BBS_OB: null,
+                    BBS_OS: null,
+                    SRS_OB: null,
+                    SRS_OS: null,
+                    SRS_BULL: null,
+                    SRS_BEAR: null,
+                    STR: null,
+                    HGM: null,
+                    BAR: null,
+                    EST: null,
+                    TBC: null,
+                    PIL: null,
+                    DCC: null,
+                    TTP: null,
+                    TWS: null,
+                    MST: null,
+                    HMR: null,
+                    TBT: null,
+                    ATR: null,
+                    ENTRY: null,
+                };
+
+                const ensureInd = {
+                    PSR: () => {
+                        if (!cache.PSR) {
+                            const psar = PSAR.calculate({ high, low, step: Site.IN_CFG.PSR_ST ?? 0.02, max: Site.IN_CFG.PSR_MX ?? 0.2 });
+                            const psarBull = (psar[psar.length - 1] ?? latestRate) < latestRate;
+                            const psarBear = (psar[psar.length - 1] ?? latestRate) > latestRate;
+                            const sl = psar[psar.length - 1] || 0;
+                            cache.PSR = true;
+                            cache.PSR_BULL = psarBull;
+                            cache.PSR_BEAR = psarBear;
+                            cache.PSR_SL = sl;
+                        }
+                    },
+                    MCD: () => {
+                        if (!cache.MCD) {
+                            const macd = MACD.calculate({ values: close, fastPeriod: Site.IN_CFG.MCD_FSP ?? 12, slowPeriod: Site.IN_CFG.MCD_SLP ?? 26, signalPeriod: Site.IN_CFG.MCD_SGP ?? 9, SimpleMAOscillator: false, SimpleMASignal: false });
+                            const macdBull = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD > macd[macd.length - 1].signal : false) : false;
+                            const macdBear = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD < macd[macd.length - 1].signal : false) : false;
+                            cache.MCD = true;
+                            cache.MCD_BULL = macdBull;
+                            cache.MCD_BEAR = macdBear;
+                        }
+                    },
+                    SRS: () => {
+                        if (cache.SRS_OB === null) {
+                            const srsi = StochasticRSI.calculate({
+                                dPeriod: Site.IN_CFG.STC_SP ?? 3,
+                                kPeriod: Site.IN_CFG.STC_SP ?? 3,
+                                rsiPeriod: Site.IN_CFG.RSI_P ?? 14,
+                                stochasticPeriod: Site.IN_CFG.STC_P ?? 14,
+                                values: close,
+                            });
+                            const OB = (((srsi[srsi.length - 1] || {}).stochRSI || 0) > 80) &&
+                                (((srsi[srsi.length - 1] || {}).d || 0) > 80) &&
+                                (((srsi[srsi.length - 1] || {}).k || 0) > 80);
+                            const OS = (((srsi[srsi.length - 1] || {}).stochRSI || 100) < 20) &&
+                                (((srsi[srsi.length - 1] || {}).d || 100) < 20) &&
+                                (((srsi[srsi.length - 1] || {}).k || 100) < 20);
+                            cache.SRS_OB = OB;
+                            cache.SRS_OS = OS;
+                            cache.SRS_BULL = !OS;
+                            cache.SRS_BEAR = !OB;
+                        }
+                    },
+                    ICH: () => {
+                        if (!cache.ICH) {
+                            const ichimoku = IchimokuCloud.calculate({
+                                high,
+                                low,
+                                conversionPeriod: Site.IN_CFG.ICH_CVP ?? 9,
+                                basePeriod: Site.IN_CFG.ICH_BSP ?? 26,
+                                spanPeriod: Site.IN_CFG.ICH_SPP ?? 52,
+                                displacement: Site.IN_CFG.ICH_DIS ?? 26,
+                            });
+                            const conversion = (ichimoku[ichimoku.length - 1] || {}).conversion ?? 0;
+                            const base = (ichimoku[ichimoku.length - 1] || {}).base ?? 0;
+                            const spanA = (ichimoku[ichimoku.length - 1] || {}).spanA ?? 0;
+                            const spanB = (ichimoku[ichimoku.length - 1] || {}).spanB ?? 0;
+                            const lag = close[close.length - (Site.IN_CFG.ICH_DIS ?? 26) - 1] ?? 0;
+                            const lagSpanA = (ichimoku[ichimoku.length - 1 - (Site.IN_CFG.ICH_DIS ?? 26)] || {}).spanA ?? 0;
+                            const lagSpanB = (ichimoku[ichimoku.length - 1 - (Site.IN_CFG.ICH_DIS ?? 26)] || {}).spanB ?? 0;
+                            const bull = (latestRate > spanA) && (spanA > spanB) && (conversion > base) && (lag > Math.max(lagSpanA, lagSpanB));
+                            const bear = (latestRate < spanA) && (spanA < spanB) && (conversion < base) && (lag < Math.min(lagSpanA, lagSpanB));
+                            let sl = spanB;
+                            cache.ICH = true;
+                            cache.ICH_BULL = bull;
+                            cache.ICH_BEAR = bear;
+                            cache.ICH_SL = sl;
+                        }
+                    },
+                    BLL: () => {
+                        if (cache.BLL_BULL === null) {
+                            cache.BLL_BULL = bullish(csd);
+                            cache.BLL_BEAR = bearish(csd);
+                        }
+                    },
+                    SMA: () => {
+                        if (cache.SMA_BULL === null) {
+                            const ma = SMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
+                            cache.SMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.SMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                        }
+                    },
+                    EMA: () => {
+                        if (cache.EMA_BULL === null) {
+                            const ma = EMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
+                            cache.EMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.EMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                        }
+                    },
+                    WMA: () => {
+                        if (cache.WMA_BULL === null) {
+                            const ma = WMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
+                            cache.WMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.WMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                        }
+                    },
+                    VWP: () => {
+                        if (cache.VWP_BULL === null) {
+                            const vwap = VWAP.calculate({ close, high, low, volume });
+                            cache.VWP_BULL = latestRate > (vwap[vwap.length - 1] || Infinity);
+                            cache.VWP_BEAR = latestRate < (vwap[vwap.length - 1] || 0);
+                        }
+                    },
+                    AOS: () => {
+                        if (cache.AOS_BULL === null) {
+                            const ao = AwesomeOscillator.calculate({ high, low, fastPeriod: Site.IN_CFG.AOS_FSP ?? 5, slowPeriod: Site.IN_CFG.AOS_SLP ?? 34 });
+                            cache.AOS_BULL = (ao[ao.length - 1] || 0) > 0;
+                            cache.AOS_BEAR = (ao[ao.length - 1] || 0) < 0;
+                        }
+                    },
+                    TRX: () => {
+                        if (cache.TRX_BULL === null) {
+                            const trix = TRIX.calculate({ values: close, period: Site.IN_CFG.TRX_P ?? 15 });
+                            cache.TRX_BULL = (trix[trix.length - 1] || 0) > 0;
+                            cache.TRX_BEAR = (trix[trix.length - 1] || 0) < 0;
+                        }
+                    },
+                    ADX: () => {
+                        if (cache.STRONG === null) {
+                            const adx = ADX.calculate({ close, high, low, period: Site.IN_CFG.ADX_P ?? 14 });
+                            cache.STRONG = ((adx[adx.length - 1] || {}).adx || 0) >= 25;
+                        }
+                    },
+                    STC: () => {
+                        if (cache.STC_OB === null) {
+                            const stoch = Stochastic.calculate({ close, high, low, period: Site.IN_CFG.STC_P ?? 14, signalPeriod: Site.IN_CFG.STC_SP ?? 3 });
+                            cache.STC_OB = ((stoch[stoch.length - 1] || {}).k || 0) > 80;
+                            cache.STC_OS = ((stoch[stoch.length - 1] || {}).k || Infinity) < 20;
+                        }
+                    },
+                    RSI: () => {
+                        if (cache.RSI_OB === null) {
+                            const rsi = RSI.calculate({ values: close, period: Site.IN_CFG.RSI_P ?? 14 });
+                            cache.RSI_OB = (rsi[rsi.length - 1] || 0) > 70;
+                            cache.RSI_OS = (rsi[rsi.length - 1] || Infinity) < 30;
+                        }
+                    },
+                    CCI: () => {
+                        if (cache.CCI_OB === null) {
+                            const cci = CCI.calculate({ close, high, low, period: Site.IN_CFG.CCI_P ?? 14 });
+                            cache.CCI_OB = (cci[cci.length - 1] || 0) > 100;
+                            cache.CCI_OB = (cci[cci.length - 1] || Infinity) < -100;
+                        }
+                    },
+                    MFI: () => {
+                        if (cache.MFI_OB === null) {
+                            const mfi = MFI.calculate({ close, volume, high, low, period: Site.IN_CFG.MFI_P ?? 14 });
+                            cache.MFI_OB = (mfi[mfi.length - 1] || 0) > 80;
+                            cache.MFI_OS = (mfi[mfi.length - 1] || Infinity) < 20;
+                        }
+                    },
+                    STR: () => {
+                        if (cache.STR === null) {
+                            cache.STR = shootingstar(csd);
+                        }
+                    },
+                    HGM: () => {
+                        if (cache.HGM === null) {
+                            cache.HGM = hangingman(csd);
+                        }
+                    },
+                    EST: () => {
+                        if (cache.EST === null) {
+                            cache.EST = eveningstar(csd);
+                        }
+                    },
+                    TBC: () => {
+                        if (cache.TBC === null) {
+                            cache.TBC = threeblackcrows(csd);
+                        }
+                    },
+                    PIL: () => {
+                        if (cache.PIL === null) {
+                            cache.PIL = piercingline(csd);
+                        }
+                    },
+                    DCC: () => {
+                        if (cache.DCC === null) {
+                            cache.DCC = darkcloudcover(csd);
+                        }
+                    },
+                    TTP: () => {
+                        if (cache.TTP === null) {
+                            cache.TTP = tweezertop(csd);
+                        }
+                    },
+                    TWS: () => {
+                        if (cache.TWS === null) {
+                            cache.TWS = threewhitesoldiers(csd);
+                        }
+                    },
+                    MST: () => {
+                        if (cache.MST === null) {
+                            cache.MST = morningstar(csd);
+                        }
+                    },
+                    HMR: () => {
+                        if (cache.HMR === null) {
+                            cache.HMR = hammerpattern(csd);
+                        }
+                    },
+                    TBT: () => {
+                        if (cache.TBT === null) {
+                            cache.TBT = tweezerbottom(csd);
+                        }
+                    },
+                    ATR: () => {
+                        if (cache.ATR === null) {
+                            const atr = ATR.calculate({ period: Site.IN_CFG.ATR_P ?? 14, close, high, low });
+                            const perc = ((atr[atr.length - 1] || 0) / latestRate) * 100;
+                            cache.ATR = perc;
+                        }
+                    },
+                };
+
+                /**
+                 * Computes entry point.
+                 * @returns {boolean|null} True if bullish entry detected, False if bearish entry detected, else False.
+                 */
+                const step1 = () => {
+                    ensureInd[Site.STR_ENTRY_IND]();
+                    if (!Analysis.#isEntryBull[symbol]) {
+                        Analysis.#isEntryBull[symbol] = [];
+                    }
+                    if (!Analysis.#isEntryBear[symbol]) {
+                        Analysis.#isEntryBear[symbol] = [];
+                    }
+                    Analysis.#isEntryBull[symbol].push(cache[`${Site.STR_ENTRY_IND}_BULL`] || false);
+                    Analysis.#isEntryBear[symbol].push(cache[`${Site.STR_ENTRY_IND}_BEAR`] || false);
+                    if (Analysis.#isEntryBull[symbol].length > (Site.IN_CFG.DIR_LEN || 5)) {
+                        Analysis.#isEntryBull[symbol] = Analysis.#isEntryBull[symbol].slice(Analysis.#isEntryBull[symbol].length - (Site.IN_CFG.DIR_LEN || 5));
+                    }
+                    if (Analysis.#isEntryBear[symbol].length > (Site.IN_CFG.DIR_LEN || 5)) {
+                        Analysis.#isEntryBear[symbol] = Analysis.#isEntryBear[symbol].slice(Analysis.#isEntryBear[symbol].length - (Site.IN_CFG.DIR_LEN || 5));
+                    }
+                    if (Analysis.#isEntryBull[symbol].length >= 2 ? (((Analysis.#isEntryBull[symbol][Analysis.#isEntryBull[symbol].length - 1]) && (!Analysis.#isEntryBull[symbol][Analysis.#isEntryBull[symbol].length - 2]))) : false) {
+                        return true;
+                    }
+                    if (Analysis.#isEntryBear[symbol].length >= 2 ? (((Analysis.#isEntryBear[symbol][Analysis.#isEntryBear[symbol].length - 1]) && (!Analysis.#isEntryBear[symbol][Analysis.#isEntryBear[symbol].length - 2]))) : false) {
+                        return false;
+                    }
+                    return null;
                 }
 
-
-                // PRIMARY INDICATORS
-                const macd = MACD.calculate({ values: close, fastPeriod: Site.IN_MACD_FAST_PERIOD, slowPeriod: Site.IN_MACD_SLOW_PERIOD, signalPeriod: Site.IN_MACD_SIGNAL_PERIOD, SimpleMAOscillator: false, SimpleMASignal: false });
-                const psar = PSAR.calculate({ high, low, step: Site.IN_PSAR_STEP, max: Site.IN_PSAR_MAX });
-                const stoch = Stochastic.calculate({ close, high, low, period: Site.IN_STOCH_PERIOD, signalPeriod: Site.IN_STOCH_SIGNAL_PERIOD });
-                // PRIMARY COMPUTATIONS
-                const macdBull = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD > macd[macd.length - 1].signal : false) : false;
-                const macdBear = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD < macd[macd.length - 1].signal : false) : false;
-                const psarBull = (psar[psar.length - 1] ?? latestRate) < latestRate;
-                const psarBear = (psar[psar.length - 1] ?? latestRate) > latestRate;
-                const stochOB = stoch.length > 0 ? (Math.max(stoch[stoch.length - 1].k, stoch[stoch.length - 1].d) > 80) : false;
-                const stochOS = stoch.length > 0 ? (Math.max(stoch[stoch.length - 1].k, stoch[stoch.length - 1].d) < 20) : false;
-                const stochBull = stochOB ? false : (stoch.length > 1 ? (((stoch[stoch.length - 1].k || stoch[stoch.length - 1].k === 0) && (stoch[stoch.length - 1].d || stoch[stoch.length - 1].d === 0)) ? (stoch[stoch.length - 1].k > stoch[stoch.length - 1].d) : false) : false);
-                const stochBear = stochOS ? false : (stoch.length > 1 ? (((stoch[stoch.length - 1].k || stoch[stoch.length - 1].k === 0) && (stoch[stoch.length - 1].d || stoch[stoch.length - 1].d === 0)) ? (stoch[stoch.length - 1].k < stoch[stoch.length - 1].d) : false) : false);
-
-                // COMPUTE TREND CONFIRMATION AND SUPORTING INDICATORS
-                const trendBull = bullish(csd);
-                const trendBear = bearish(csd);
-                const vwap = VWAP.calculate({ close, high, low, volume });
-                const vwapBull = vwap.length > 0 ? latestRate > vwap[vwap.length - 1] : false;
-                const vwapBear = vwap.length > 0 ? latestRate < vwap[vwap.length - 1] : false;
-                const adl = ADL.calculate({ close, high, low, volume });
-                const adlDir = computeArithmeticDirection(adl);
-                const adlBull = adlDir > 0 && priceDir > 0;
-                const adlBear = adlDir < 0 && priceDir < 0;
-                const atr = ATR.calculate({ close, high, low, period: Site.IN_MA_PERIOD });
-                const ao = AwesomeOscillator.calculate({ fastPeriod: Site.IN_AO_FAST_PERIOD, slowPeriod: Site.IN_AO_SLOW_PERIOD, high, low });
-                const aoBull = (ao[ao.length - 1] ?? -1) > 0;
-                const aoBear = (ao[ao.length - 1] ?? 1) < 0;
-                const roc = ROC.calculate({ values: close, period: Site.IN_MA_PERIOD });
-                const rocDir = computeArithmeticDirection(roc);
-                const rocBull = (roc[roc.length - 1] ?? -1) > 0;
-                const rocBear = (roc[roc.length - 1] ?? 1) < 0;
-                const fi = ForceIndex.calculate({ close, volume, period: Site.IN_FI_PERIOD });
-                const fiDir = computeArithmeticDirection(fi);
-                const fiBull = fiDir > 0 && (fi[fi.length - 1] ?? 0) > 0;
-                const fiBear = fiDir < 0 && (fi[fi.length - 1] ?? 0) < 0;
-                const trix = TRIX.calculate({ period: Site.IN_MA_PERIOD, values: close });
-                const trixBull = (trix[trix.length - 1] ?? 0) > 0;
-                const trixBear = (trix[trix.length - 1] ?? 0) < 0;
-                const adx = ADX.calculate({ close, high, low, period: Site.IN_MA_PERIOD * 2 });
-                const adxStrong = adx.length > 0 ? ((adx[adx.length - 1].adx || adx[adx.length - 1].adx === 0) ? adx[adx.length - 1].adx > 25 : false) : false;
-                const adxWeak = adx.length > 0 ? ((adx[adx.length - 1].adx || adx[adx.length - 1].adx === 0) ? adx[adx.length - 1].adx < 20 : false) : false;
-                const bb = BollingerBands.calculate({ period: Site.IN_BB_PERIOD, stdDev: Site.IN_BB_STDDEV, values: close });
-                const bbBuy = bb.length > 0 ? latestRate < bb[bb.length - 1].lower : false;
-                const bbSell = bb.length > 0 ? latestRate > bb[bb.length - 1].upper : false;
-                const bbOS = bbBuy;
-                const bbOB = bbSell;
-
-                // OVERBOUGHT AND OVERSOLD INDICATORS
-                const cci = CCI.calculate({ close, high, low, period: Site.IN_MA_PERIOD });
-                const mfi = MFI.calculate({ close, high, low, volume, period: Math.min(Site.IN_MA_PERIOD, data.length) });
-                const rsi = RSI.calculate({ values: close, period: Math.min(Site.IN_MA_PERIOD, data.length) });
-                // OVERBOUGHT AND OVERSOLD COMPUTATIONS
-                const cciOB = (cci[cci.length - 1] ?? -1) > 100;
-                const mfiOB = (mfi[mfi.length - 1] ?? 80) > 80;
-                const rsiOB = (rsi[rsi.length - 1] ?? 70) > 70;
-                const cciOS = (cci[cci.length - 1] ?? 1) < -100;
-                const mfiOS = (mfi[mfi.length - 1] ?? 20) < 20;
-                const rsiOS = (rsi[rsi.length - 1] ?? 30) < 30;
-
-                // CANDLESTICK COMPUTATIONS
-                const bearishReversal = (abandonedbaby(csd) || bearishengulfingpattern(csd) ||
-                    darkcloudcover(csd) || piercingline(csd) || eveningstar(csd) || eveningdojistar(csd) ||
-                    threeblackcrows(csd) || gravestonedoji(csd) || bearishharami(csd) || bearishmarubozu(csd) ||
-                    tweezertop(csd) || hangingman(csd) || shootingstar(csd) || bearishharamicross(csd)) &&
-                    Analysis.#obos[symbol].ob &&
-                    clearDirection(close.slice(close.length - 3)) <= 0;
-                const bullishReversal = (abandonedbaby(csd) || bullishengulfingpattern(csd) ||
-                    threewhitesoldiers(csd) || morningstar(csd) || morningdojistar(csd) || hammerpattern(csd) ||
-                    dragonflydoji(csd) || bullishharami(csd) || bullishmarubozu(csd) || bullishharamicross(csd) ||
-                    tweezerbottom(csd)) && Analysis.#obos[symbol].os &&
-                    clearDirection(close.slice(close.length - 3)) >= 0;
-
-                // PREFLOW COMPUTATIONS
-                const overallBull = macdBull && (psarBull || stochBull);
-                const overallBear = macdBear && (psarBear || stochBear);
-                const supportBull = booleanThreshold([
-                    trendBull,
-                    vwapBull,
-                    adlBull,
-                    aoBull,
-                    rocBull,
-                    fiBull,
-                    trixBull,
-                ]);
-                const supportBear = booleanThreshold([
-                    trendBear,
-                    vwapBear,
-                    adlBear,
-                    aoBear,
-                    rocBear,
-                    fiBear,
-                    trixBear,
-                ]);
-                const goodBuy = bbBuy;
-                const goodSell = bbSell;
-                const volatilityPerc = (atr.length > 0 ? atr[atr.length - 1] : 0) / latestRate * 100;
-                const TPSLPerc = Math.abs((psar[psar.length - 1] ?? latestRate) - latestRate) / latestRate * 100;
-                if (!Analysis.#tp[symbol]) {
-                    Analysis.#tp[symbol] = [];
-                }
-                if (!Analysis.#vol[symbol]) {
-                    Analysis.#vol[symbol] = [];
-                }
-                Analysis.#tp[symbol].push(TPSLPerc);
-                Analysis.#vol[symbol].push(volatilityPerc);
-                if (Analysis.#tp[symbol].length > Site.IN_DIRECTION_MAX_LENGTH) {
-                    Analysis.#tp[symbol] = Analysis.#tp[symbol].slice(Analysis.#tp[symbol].length - Site.IN_DIRECTION_MAX_LENGTH);
-                }
-                if (Analysis.#vol[symbol].length > Site.IN_DIRECTION_MAX_LENGTH) {
-                    Analysis.#vol[symbol] = Analysis.#vol[symbol].slice(Analysis.#vol[symbol].length - Site.IN_DIRECTION_MAX_LENGTH);
+                /**
+                 * Confirms bull trend.
+                 * @returns {boolean} True if bull trend else False.
+                 */
+                const step2 = () => {
+                    for (let i = 0; i < Site.STR_TREND_IND.length; i++) {
+                        ensureInd[Site.STR_TREND_IND[i]]();
+                    }
+                    /**
+                     * @type {boolean[]}
+                     */
+                    const bools = Site.STR_TREND_IND.map(x => cache[`${x}_${cache.ENTRY ? 'BULL' : 'BEAR'}`] || false);
+                    return booleanConsolidator(bools, Site.STR_TREND_CV);
                 }
 
-                // FINAL COMPUTATIONS
-                const overBought = booleanThreshold([stochOB, cciOB, mfiOB, rsiOB, bbOB]);
-                const overSold = booleanThreshold([stochOS, cciOS, mfiOS, rsiOS, bbOS]);
-                const currentState = {
-                    overallBull,
-                    overallBear,
-                    supportBull,
-                    supportBear,
-                    goodBuy,
-                    goodSell,
-                    overBought,
-                    overSold,
-                    bearishReversal,
-                    bullishReversal,
-                    adxStrong,
-                    adxWeak,
-                    priceDir,
+                /**
+                 * Confirms strong trend.
+                 * @returns {boolean} True if strong trend else False.
+                 */
+                const step3 = () => {
+                    ensureInd.ADX();
+                    return cache.STRONG || false;
                 }
 
-                let { long, short, description, result } = Analysis.#computeMatrix(currentState);
-                const VT = `${clearDirection(Analysis.#vol[symbol])}${clearDirection(Analysis.#tp[symbol])}`;
-                const signal = new Signal(short, long, description, volatilityPerc, TPSLPerc);
-                Analysis.#multilayer(symbol, long, short, description, latestRate, ts, signal);
+                /**
+                 * Detects overbought.
+                 * @returns {boolean} True if overbought else False.
+                 */
+                const step4 = () => {
+                    for (let i = 0; i < Site.STR_OB_IND.length; i++) {
+                        ensureInd[Site.STR_OB_IND[i]]();
+                    }
+                    /**
+                     * @type {boolean[]}
+                     */
+                    const bools = Site.STR_OB_IND.map(x => cache[`${x}_${cache.ENTRY ? 'OB' : 'OS'}`] || false);
+                    return booleanConsolidator(bools, Site.STR_OB_CV);
+                }
+
+                /**
+                 * Detects reversal patterns.
+                 * @returns {boolean} True if reversal else False.
+                 */
+                const step5 = () => {
+                    for (let i = 0; i < (cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).length; i++) {
+                        ensureInd[(cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR)[i]]();
+                    }
+                    /**
+                     * @type {boolean[]}
+                     */
+                    const bools = (cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).map(x => cache[`${x}`] || false);
+                    return booleanConsolidator(bools, Site.STR_REV_CV);
+                }
+
+                /**
+                 * Computes stoploss price.
+                 * @returns {number}
+                 */
+                const step6 = () => {
+                    ensureInd[Site.STR_TSL_IND]();
+                    if (cache.ENTRY === true) {
+                        return cache[`${Site.STR_TSL_IND}_SL`] < latestRate ? cache[`${Site.STR_TSL_IND}_SL`] : (latestRate - (cache[`${Site.STR_TSL_IND}_SL`] - latestRate));
+                    }
+                    else if (cache.ENTRY === false) {
+                        return cache[`${Site.STR_TSL_IND}_SL`] > latestRate ? cache[`${Site.STR_TSL_IND}_SL`] : (latestRate + (latestRate - cache[`${Site.STR_TSL_IND}_SL`]));
+                    }
+                    return 0;
+                }
+
+                /**
+                 * Ensures price volatility is within suitable percentage range.
+                 * @returns {boolean} True if within range else False.
+                 */
+                const step7 = () => {
+                    ensureInd.ATR();
+                    return cache.ATR >= (Site.STR_VOL_RNG[0] || 0) && cache.ATR <= (Site.STR_VOL_RNG[1] || Infinity);
+                }
+
+                let stoploss = 0;
+                let long = false;
+                let short = false;
+                let desc = "No Signal";
+
+                Log.flow(`Analysis > ${symbol} > Checking for entry...`, 6);
+                cache.ENTRY = step1();
+                if (cache.ENTRY === true || cache.ENTRY === false) {
+                    // Entry detected.
+                    Log.flow(`Analysis > ${symbol} > Entry detected. Confirming ${cache.ENTRY ? 'bull' : 'bear'} trend...`, 6);
+                    if ((Site.STR_TREND_FV && step2()) || (!Site.STR_TREND_FV)) {
+                        // Trend confirmed.
+                        Log.flow(`Analysis > ${symbol} > Trend confirmed. Checking trend strength...`, 6);
+                        if ((Site.STR_STG_FV && step3()) || (!Site.STR_STG_FV)) {
+                            // Trend strength confirmed.
+                            Log.flow(`Analysis > ${symbol} > Strength is acceptable. Checking if over${cache.ENTRY ? 'bought' : 'sold'}...`, 6);
+                            if ((Site.STR_OB_FV && (!step4())) || (!Site.STR_OB_FV)) {
+                                // No presence of effecting overbought confirmed.
+                                Log.flow(`Analysis > ${symbol} > Overbought condition acceptable. Checking for reversals...`, 6);
+                                if ((Site.STR_REV_FV && (!step5())) || (!Site.STR_REV_FV)) {
+                                    Log.flow(`Analysis > ${symbol} > Reversal conditions acceptable. Checking volatility...`, 6);
+                                    // No reversl detected.
+                                    if (step7()) {
+                                        // Volatility is acceptable
+                                        Log.flow(`Analysis > ${symbol} > Volatility is acceptable. Buy signal confirmed.`, 6);
+                                        if (cache.ENTRY) {
+                                            long = true;
+                                            desc = "Confirmed Long"
+                                        }
+                                        else {
+                                            short = true;
+                                            desc = "Confirmed Short"
+                                        }
+                                    }
+                                    else {
+                                        Log.flow(`Analysis > ${symbol} > Volatility out of range.`, 6);
+                                    }
+                                }
+                                else {
+                                    Log.flow(`Analysis > ${symbol} > Trend reversal detected.`, 6);
+                                }
+                            }
+                            else {
+                                Log.flow(`Analysis > ${symbol} > Ticker is overbought.`, 6);
+                            }
+                        }
+                        else {
+                            Log.flow(`Analysis > ${symbol} > Strength not acceptable.`, 6);
+                        }
+                    }
+                    else {
+                        Log.flow(`Analysis > ${symbol} > Trend not confirmed.`, 6);
+                    }
+                }
+                else {
+                    Log.flow(`Analysis > ${symbol} > No entry detected.`, 6);
+                }
+
+                stoploss = step6();
+                // Stop loss computed.
+
+
+                const signal = new Signal(short, long, desc, cache.ATR, stoploss, latestRate);
+
+                Analysis.#multilayer(symbol, long, short, desc, latestRate, ts, signal);
                 const signals = Analysis.#getMultilayeredHistory(symbol);
+                cache = Object.fromEntries(Object.entries(cache).filter(([__dirname, v]) => v !== null));
 
                 // CORRECT SIGNALS HERE
-                const { nlong, nshort } = Analysis.#correctSignals(signals, long, short, description);
+                const { nlong, nshort, ndesc } = Analysis.#correctSignals(signals, long, short, desc);
                 signal.long = nlong;
                 signal.short = nshort;
+                signal.description = ndesc;
 
-                if ((long || short) && !nlong && !nshort) {
-                    signal.description = "Corrected Signal";
+                if ((buy && !nbuy) || (sell && !nsell)) {
+                    signal.description = "No Signal";
                 }
 
                 // COLLECT DATA FOR EXTERNAL MULTILAYER ANALYSIS FROM HERE
-                if (Site.IN_ML_COLLECT_DATA) {
-                    Analysis.#collector(symbol, latestRate, signals[signals.length - 1], signal.long, signal.short, volatilityPerc, TPSLPerc, signal.description,
-                        {
-                            macdBear,
-                            macdBull,
-                            psarBull,
-                            psarBear,
-                            stochBull,
-                            stochBear,
-                            trendBull,
-                            trendBear,
-                            vwapBull,
-                            adlBull,
-                            aoBull,
-                            rocBull,
-                            fiBull,
-                            trixBull,
-                            vwapBear,
-                            adlBear,
-                            aoBear,
-                            rocBear,
-                            fiBear,
-                            trixBear,
-                            stochOB, cciOB, mfiOB, rsiOB,
-                            stochOS, cciOS, mfiOS, rsiOS,
-                            bearishReversal,
-                            bullishReversal,
-                            priceDir,
-                            VT,
-                            overallBull,
-                            overallBear,
-                            supportBull,
-                            supportBear,
-                            goodBuy,
-                            goodSell,
-                            overBought,
-                            overSold,
-                            adxStrong,
-                            adxWeak,
-                        }
-                    );
+                if (Site.IN_CFG.ML_COL_DATA) {
+                    Analysis.#collector(symbol, latestRate, signals[signals.length - 1] || "", signal.long, signal.short, stoploss, signal.description, cache);
                 }
 
-                // REGISTER CURRENT OB AND OS
-                Analysis.#obos[symbol].ob = overBought;
-                Analysis.#obos[symbol].os = overSold;
-
                 // CONCLUDE ANALYSIS
-                Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"} | Price: ${FFF(latestRate)}`, 5);
+                Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"} | Price: ${FFF(latestRate)}${stoploss ? ` | Stoploss: ${FFF(stoploss)}` : ""}.`, 5);
+                // CONVERT STOP LOSS TO PERCENTAGE AND FIT WITHIN RANGE
+                signal.tpsl = Math.floor(Math.abs((latestRate - signal.tpsl) / latestRate * 100) * 100) / 100;
                 resolve(signal);
             }
             else {
@@ -394,6 +666,8 @@ class Analysis {
             }
         })
     }
+
+
 
     /**
      * Performs multilayering signal check
@@ -407,29 +681,8 @@ class Analysis {
     static #correctSignals = (signals, long, short, desc) => {
         let nlong = long;
         let nshort = short;
-        if (signals.length < 2) {
-            nlong = false;
-            nshort = false;
-        }
-        else {
-            if (signals.length > 2) {
-                signals = signals.slice(signals.length - 2);
-            }
-            let signal = signals.join(" ");
-            if (long) {
-                nlong = signal == "FHNP BDNP"
-            }
-            if (short) {
-                nshort = signal == "FHNP FHJL"
-            }
-        }
-        if(long && Site.TR_SIGNAL_BLACKLIST.indexOf(desc) >= 0){
-            nlong = false;
-        }
-        if(short && Site.TR_SIGNAL_BLACKLIST.indexOf(desc) >= 0){
-            nshort = false;
-        }
-        return { nlong, nshort };
+        let ndesc = desc;
+        return { nlong, nshort, ndesc };
     }
 
     /**
@@ -467,10 +720,10 @@ class Analysis {
         if (Analysis.#multilayered[symbol] ? Analysis.#multilayered[symbol].signals.length > 0 : false) {
             history = history.concat([Analysis.#multilayered[symbol].signals.sort((a, b) => a.localeCompare(b)).join("")]);
         }
-        if (history.length > Site.IN_MAX_SIGNAL_HISTORY_LENGTH) {
-            history = history.slice(history.length - Site.IN_MAX_SIGNAL_HISTORY_LENGTH);
+        if (history.length > (Site.IN_CFG.MX_SIGHIST_LEN || 5)) {
+            history = history.slice(history.length - (Site.IN_CFG.MX_SIGHIST_LEN || 5));
         }
-        return history
+        return history;
     }
 
     /**
@@ -494,8 +747,8 @@ class Analysis {
         if (ts !== Analysis.#multilayered[symbol].ts && Analysis.#multilayered[symbol].signals.length > 0) {
             // harvest
             Analysis.#multilayeredHistory[symbol].push(Analysis.#multilayered[symbol].signals.sort((a, b) => a.localeCompare(b)).join(""));
-            if (Analysis.#multilayeredHistory[symbol].length > Site.IN_MAX_SIGNAL_HISTORY_LENGTH) {
-                Analysis.#multilayeredHistory[symbol] = Analysis.#multilayeredHistory[symbol].slice(Analysis.#multilayeredHistory[symbol].length - Site.IN_MAX_SIGNAL_HISTORY_LENGTH);
+            if (Analysis.#multilayeredHistory[symbol].length > (Site.IN_CFG.MX_SIGHIST_LEN || 5)) {
+                Analysis.#multilayeredHistory[symbol] = Analysis.#multilayeredHistory[symbol].slice(Analysis.#multilayeredHistory[symbol].length - (Site.IN_CFG.MX_SIGHIST_LEN || 5));
             }
             Analysis.#multilayered[symbol].signals = [];
         }

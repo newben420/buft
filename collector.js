@@ -1,11 +1,25 @@
+const arg = process.argv.slice(2);
+if (arg.length && arg[0] == "nc") {
+    process.argv.splice(2, 0, ".env");
+}
 const Analysis = require("./engine/analysis");
 const BitgetEngine = require("./engine/bitget");
 const getDateTime = require("./lib/get_date_time");
 const getTimeElapsed = require("./lib/get_time_elapsed");
 const Log = require("./lib/log");
 const Candlestick = require("./model/candlestick");
+const rootDir = require("./root");
 const Site = require("./site");
 const fs = require("fs");
+const path = require("path");
+
+const useCache = arg.indexOf("nc") < 0;
+
+Site.PRODUCTION = true;
+Site.FLOW_LOG_MAX_PRIORITY = 1;
+Site.IN_CFG.ML_COL_DATA = true;
+
+const tc = str => str.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
 
 /**
  * This is responsible for hastened data collection for multilayering
@@ -14,47 +28,96 @@ const fs = require("fs");
  */
 class Collector {
 
+    static #cacheId = `CL_${Site.CL_MAX_ROWS_PER_FETCH}_${Site.CL_ROWS}_${Site.TK_GRANULARITY}`;
+
     /**
-     * @type {Record<string, Candlestick[]>}
+     * @type {Record<string,Record<string, any[]>>}
      */
-    static #csData = {};
+    static #cache = {};
 
-    static run = async () => {
-        Log.flow(`Collector > Initialized.`);
-        Site.FLOW_LOG_MAX_PRIORITY = 0;
-        Site.IN_ML_COLLECT_DATA = true;
-        let usedCache = null;
-        const getRawCache = () => {
-            let cache = {};
+    static #persPth = path.resolve(rootDir(), "analysis");
+    static #cachePth = path.resolve(Collector.#persPth, "cache.json");
+    static #colPth = path.resolve(Collector.#persPth, "col_data.json");
+
+    /**
+     * @type {Record<string, Record<string>[]>};
+     */
+    static #colData = {}
+
+    /**
+    * Script initialzizer.
+    * @returns {Promise<boolean>}
+    */
+    static #start = () => {
+        return new Promise((resolve, reject) => {
+            Log.flow(`Collector > Running prerequisites.`, 0);
             try {
-                cache = JSON.parse(fs.readFileSync(Site.IN_ML_CACHE_PATH));
+                if (!fs.existsSync(Collector.#persPth)) {
+                    fs.mkdirSync(Collector.#persPth);
+                    Log.flow(`Collector > Created directory at '${Collector.#persPth}'.`, 0);
+                }
+                if (fs.existsSync(Collector.#cachePth)) {
+                    Log.flow(`Collector > Cache file found at '${Collector.#cachePth}'.`, 0);
+                    Collector.#cache = JSON.parse(fs.readFileSync(Collector.#cachePth, "utf8"));
+                    resolve(true);
+                }
+                else {
+                    Log.flow(`Collector > No cache found.`, 0);
+                    resolve(true);
+                }
             } catch (error) {
+                Log.flow(`Collector > Error encountered ${error.message ? `${error.message}` : ''}.`, 0);
+                Log.dev(error);
+                resolve(false);
+            }
+        });
+    }
 
+    /**
+     * Script destructor.
+     * @returns {Promise<boolean>}
+     */
+    static #stop = () => {
+        return new Promise((resolve, reject) => {
+            Log.flow(`Collector > Running post-sctipts.`, 0);
+            try {
+                fs.writeFileSync(Collector.#cachePth, JSON.stringify(Collector.#cache), "utf8");
+                Log.flow(`Collector > Saved cache to '${Collector.#cachePth}'.`, 0);
+                fs.writeFileSync(Collector.#colPth, JSON.stringify(Collector.#colData, null, "\t"), "utf8");
+                Log.flow(`Collector > Saved collector data to '${Collector.#colPth}'.`, 0);
+                resolve(true);
+            } catch (error) {
+                Log.flow(`Collector > Error encountered ${error.message ? `${error.message}` : ''}.`, 0);
+                Log.dev(error);
+                resolve(false);
             }
-            finally {
-                return cache;
-            }
-        }
-        let cache = getRawCache();
-        if (cache.rows && cache.symbols && cache.interval && cache.rows == Site.CL_ROWS && cache.symbols == Site.CL_SYMBOLS.join("_") && cache.interval == Site.TK_INTERVAL) {
-            Collector.#csData = cache.data;
-            Log.flow(`Collector > Using cached data.`, 0);
-            usedCache = true;
-        }
-        else {
-            usedCache = false;
-        }
-        for (const symbol of Site.CL_SYMBOLS) {
-            if (!usedCache) {
-                Collector.#csData[symbol] = [];
-            }
-            Log.flow(`Collector > ${symbol} > Initialized.`, 0);
+        })
+    }
 
-            let remainingRowsToCollect = Site.CL_ROWS;
-            let maxRowsPerFetch = Site.CL_MAX_ROWS_PER_FETCH;
-            let errorEncountered = "";
-            let lastStartTime = Math.floor((Date.now() - (Site.CL_ROWS * Site.TK_INTERVAL)) / 1000) * 1000;
-            if (!usedCache) {
+    /**
+     * Ensures data is available for a token
+     * @param {string} symbol 
+     * @returns {Promise<Candlestick[]|null>}
+     */
+    static #fetchData = (symbol) => {
+        return new Promise(async (resolve, reject) => {
+            let cachedData = (Collector.#cache[Collector.#cacheId] || {})[symbol];
+            if ((cachedData ? (cachedData.length > 0) : false) && useCache) {
+                Log.flow(`Collector > Cached data found for ${symbol}.`, 0);
+                resolve(cachedData);
+            }
+            else {
+                Log.flow(`Collector > Cached data not found for ${symbol}. Fetching data...`, 0);
+                if (!Collector.#cache[Collector.#cacheId]) {
+                    Collector.#cache[Collector.#cacheId] = {};
+                }
+                if (!Collector.#cache[Collector.#cacheId][symbol] || (!useCache)) {
+                    Collector.#cache[Collector.#cacheId][symbol] = []
+                }
+                let remainingRowsToCollect = Site.CL_ROWS;
+                let maxRowsPerFetch = Site.CL_MAX_ROWS_PER_FETCH;
+                let errorEncountered = "";
+                let lastStartTime = Math.floor((Date.now() - (Site.CL_ROWS * Site.TK_INTERVAL)) / 1000) * 1000;
                 Log.flow(`Collector > ${symbol} > Data starting from ${getTimeElapsed(lastStartTime, Date.now())} ago will be collected.`, 0);
                 while (remainingRowsToCollect > 0 && (!errorEncountered)) {
                     let nowCollecting = (remainingRowsToCollect > maxRowsPerFetch ? (maxRowsPerFetch) : remainingRowsToCollect);
@@ -74,7 +137,7 @@ class Collector {
                             endTime: endTime,
                         });
                         if (data.msg = "success") {
-                            Collector.#csData[symbol] = Collector.#csData[symbol].concat(data.data.map(x => new Candlestick(x[1], x[2], x[3], x[4], x[6])));
+                            Collector.#cache[Collector.#cacheId][symbol] = Collector.#cache[Collector.#cacheId][symbol].concat(data.data.map(x => new Candlestick(x[1], x[2], x[3], x[4], x[6])));
                         }
                         else {
                             errorEncountered = `${data.code} - ${data.msg}`;
@@ -85,38 +148,54 @@ class Collector {
                     }
                     lastStartTime = endTime;
                 }
+                if (errorEncountered) {
+                    Log.flow(`Collector > ${symbol} > Fetch failed with error '${errorEncountered}'.`, 0);
+                    resolve(null);
+                }
+                else {
+                    const l = Collector.#cache[Collector.#cacheId][symbol].length;
+                    Log.flow(`Collector > ${symbol} > Fetch succeeded (${l} row${l == 1 ? "" : "s"}).`, 0);
+                    resolve(Collector.#cache[Collector.#cacheId][symbol]);
+                }
             }
-            if (errorEncountered) {
-                Log.flow(`Collector > ${symbol} > Fetch failed with error '${errorEncountered}'.`, 0);
+        });
+    }
+
+    /**
+     * Activation method
+     */
+    static run = async () => {
+        Log.flow(`Collector > Initialized.`, 0);
+        if (Site.CL_SYMBOLS.length) {
+            const started = await Collector.#start();
+            if (started) {
+                Log.flow(`Collector > Done running prerequisites.`, 0);
+                for (const symbol of Site.CL_SYMBOLS) {
+                    Log.flow(`Collector > ${symbol} > Obtaining data...`, 0);
+                    const data = await Collector.#fetchData(symbol);
+                    if (data ? (data.length > 0) : false) {
+                        Log.flow(`Collector > ${symbol} > Data obtained.`, 0);
+                        let t = 0;
+                        for (let i = (Site.TK_MAX_ROWS - 1); i < data.length; i++) {
+                            t++;
+                            const d = data.slice((i + 1 - Site.TK_MAX_ROWS), (i + 1));
+                            const signal = await Analysis.run(symbol, d);
+                        }
+                        Log.flow(`Collector > ${symbol} > Analysis succeeded ${t} time${t == 1 ? "" : "s"}.`, 0);
+                    }
+                    else {
+                        Log.flow(`Collector > ${symbol} > Failed to obtain data.`, 0);
+                    }
+                }
+                Collector.#colData = Analysis.collectedData;
+                await Collector.#stop();
             }
             else {
-                const l = Collector.#csData[symbol].length;
-                Log.flow(`Collector > ${symbol} > Fetch succeeded (${l} row${l == 1 ? "" : "s"}).`, 0);
-                let t = 0;
-                for (let i = (Site.TK_MAX_ROWS - 1); i < Collector.#csData[symbol].length; i++) {
-                    t++;
-                    const data = Collector.#csData[symbol].slice((i + 1 - Site.TK_MAX_ROWS), (i + 1));
-                    const analysed = await Analysis.run(symbol, data);
-                }
-                Log.flow(`Collector > ${symbol} > Analysis succeeded (${t} time${l == 1 ? "" : "s"}).`, 0);
+                Log.flow(`Collector > Script failed to start.`, 0);
             }
-            Log.flow(`Collector > ${symbol} > Concluded.`, 0);
         }
-        try {
-            if (usedCache === false) {
-                const cache = {
-                    rows: Site.CL_ROWS,
-                    symbols: Site.CL_SYMBOLS.join("_"),
-                    interval: Site.TK_INTERVAL,
-                    data: Collector.#csData
-                }
-                fs.writeFileSync(Site.IN_ML_CACHE_PATH, JSON.stringify(cache), "utf8");
-            }
-        } catch (error) {
-            Log.dev(error);
-        }
-        finally {
-            await Analysis.stop();
+        else {
+            Log.flow(`Collector > No tickers found.`, 0);
         }
     }
 }

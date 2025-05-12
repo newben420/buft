@@ -78,26 +78,6 @@ class Order {
     /**
      * @type {number}
      */
-    take_profit_price;
-
-    /**
-     * @type {boolean}
-     */
-    take_profit_isset;
-
-    /**
-     * @type {boolean}
-     */
-    stop_loss_isset;
-
-    /**
-     * @type {number}
-     */
-    stop_loss_price;
-
-    /**
-     * @type {number}
-     */
     leverage;
 
     /**
@@ -106,23 +86,57 @@ class Order {
     close_reason;
 
     /**
+     * @type {string}
+     */
+    open_reason;
+
+    /**
+     * @type {string}
+     */
+    id;
+
+    /**
+     * @type {string}
+     */
+    orderId;
+
+    /**
+     * @type {number}
+     */
+    sl;
+
+    /**
+     * @type {boolean}
+     */
+    manual;
+
+    /**
      * Object constructor
      * @param {string} symbol 
-     * @param {number} open_time 
-     * @param {number} open_price 
+     * @param {string} id, 
      * @param {"long"|"short"} side 
-     * @param {number} size 
+     * @param {number} open_time 
+     * @param {number} sl 
+     * @param {boolean} manual 
+     * @param {string} open_reason 
      */
     constructor(
         symbol,
-        open_time,
-        open_price,
+        id,
         side,
-        size,
+        open_time,
+        sl,
+        manual,
+        open_reason,
     ) {
         this.symbol = symbol;
+        this.id = id;
+        this.side = side;
+        this.sl = sl;
+        this.manual = manual;
         this.open_time = open_time;
-        this.open_price = open_price;
+        this.open_reason = open_reason;
+        this.open_price = 0;
         this.close_time = 0;
         this.close_price = 0;
         this.gross_profit = 0;
@@ -132,15 +146,11 @@ class Order {
         this.least_roi = 0;
         this.liquidation_price = 0;
         this.breakeven_price = 0;
-        this.side = side;
-        this.size = size;
+        this.size = 0;
         this.price = 0;
         this.leverage = 1;
-        this.take_profit_price = 0;
-        this.stop_loss_price = 0;
-        this.take_profit_isset = false;
-        this.stop_loss_isset = false;
         this.close_reason = "Manual";
+        this.orderId = "";
     }
 }
 

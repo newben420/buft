@@ -11,6 +11,8 @@ const Account = require('./account');
 const Signal = require('../model/signal');
 const BitgetEngine = require('./bitget');
 
+process.env.NTBA_FIX_350 = true;
+
 class TelegramEngine {
 
     /**
@@ -218,15 +220,15 @@ class TelegramEngine {
                 },
                 {
                     command: "/stats",
-                    description: Site.TITLE + "'s Status",
+                    description: "Status",
                 },
                 {
                     command: "/tickers",
-                    description: "Manage Tickers"
+                    description: "Tickers"
                 },
                 {
                     command: "/orders",
-                    description: "Manage Active Orders"
+                    description: "Orders"
                 }
             ]);
             if (!Site.TG_POLLING) {
@@ -266,6 +268,13 @@ class TelegramEngine {
                             }
                         });
                     }
+                    else if (/^\/collect$/.test(content)) {
+                        try {
+                            require("./analysis").sendCollected();
+                        } catch (error) {
+                            Log.dev(error);
+                        }
+                    }
                     else if (/^\/orders$/.test(content)) {
                         const { message, inline } = TelegramEngine.#getOrdersContent();
                         if (message != TelegramEngine.#lastOrdersContent) {
@@ -280,14 +289,25 @@ class TelegramEngine {
                             });
                         }
                     }
-                    else if ((new RegExp(`^[A-Z0-9]+${Site.TK_MARGIN_COIN}$`)).test(content)) {
-                        const symbol = content;
-                        const done = await TickerEngine.addTicker(symbol);
-                        if (done) {
-                            TelegramEngine.sendMessage(`✅ *${symbol}* added to tickers`);
+                    else if ((new RegExp(`[A-Z0-9]+${Site.TK_MARGIN_COIN}`)).test(content)) {
+                        const symbols = content.split(" ").filter(x => (new RegExp(`^[A-Z0-9]+${Site.TK_MARGIN_COIN}$`)).test(x));
+                        let a = 0;
+                        let b = 0;
+                        for (let i = 0; i < symbols.length; i++) {
+                            const symbol = symbols[i];
+                            const done = await TickerEngine.addTicker(symbol);
+                            if (done) {
+                                a++;
+                            }
+                            else {
+                                b++;
+                            }
                         }
-                        else {
-                            TelegramEngine.sendMessage(`❌ Could not add *${symbol}* to tickers`);
+                        if (a > 0) {
+                            TelegramEngine.sendMessage(`✅ ${a} ticker${a == 1 ? "" : "s"} added`);
+                        }
+                        if (b > 0) {
+                            TelegramEngine.sendMessage(`❌ Could not add ${b} ticker${b == 1 ? "" : "s"}`);
                         }
                     }
                     else if (/^lever=[0-9]+$/i.test(content)) {
@@ -349,7 +369,7 @@ class TelegramEngine {
                         }
                     }
                     else {
-                        TelegramEngine.sendMessage(`😔 *${Site.TITLE}* could not understand your last message\n\nSend a ticker symbol e.g. BTCUSDT to add it to tickers\n\nSend "lever=[value]" e.g. lever=20 to change leverages for all tickers in current margin mode`);
+                        TelegramEngine.sendMessage(`😔 *${Site.TITLE}* could not understand your last message\n\nSend a ticker symbol or more e.g. "BTCUSDT ETHUSDT" to add it to tickers\n\nSend "lever=[value]" e.g. lever=20 to change leverages for all tickers in current margin mode`);
                     }
                 }
             });
@@ -467,7 +487,7 @@ class TelegramEngine {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
                             try {
-                                const signal = new Signal(false, true, "Manual Long", 0, 0);
+                                const signal = new Signal(false, true, "Manual Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                                 const done = await Trader.openOrder(symbol, signal, true);
                                 if (done) {
                                     if (TelegramEngine.#lastTickersMessageID) TelegramEngine.deleteMessage(TelegramEngine.#lastTickersMessageID);
@@ -490,7 +510,7 @@ class TelegramEngine {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
                             try {
-                                const signal = new Signal(true, false, "Manual Short", 0, 0);
+                                const signal = new Signal(true, false, "Manual Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                                 const done = await Trader.openOrder(symbol, signal, true);
                                 if (done) {
                                     if (TelegramEngine.#lastTickersMessageID) TelegramEngine.deleteMessage(TelegramEngine.#lastTickersMessageID);
@@ -513,7 +533,7 @@ class TelegramEngine {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
                             try {
-                                const done = await Trader.closeOrder(symbol);
+                                const done = await Trader.closeOrder(symbol, true);
                                 if (done) {
                                     let { message, inline } = TelegramEngine.#getOrdersContent();
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
@@ -540,7 +560,6 @@ class TelegramEngine {
                         }
                     }
                 }
-
             });
 
             TelegramEngine.#bot.on("polling_error", (err) => {
@@ -554,6 +573,55 @@ class TelegramEngine {
 
             Log.flow(`Telegram > Initialized.`, 0);
             resolve(true);
+        })
+    }
+
+    /**
+         * Sends string as a text file.
+         * @param {string} content 
+         * @param {string} caption 
+         * @param {string} filename 
+         * @returns {Promise<boolean>}
+         */
+    static sendStringAsTxtFile = (content, caption, filename) => {
+        return new Promise((resolve, reject) => {
+            TelegramEngine.#bot.sendDocument(Site.TG_CHAT_ID, Buffer.from(content, "utf8"), {
+                parse_mode: "MarkdownV2",
+                caption: TelegramEngine.sanitizeMessage(caption),
+            }, {
+                contentType: "text/plain",
+                filename: filename,
+            }).then(r => {
+                resolve(true);
+            }).catch(err => {
+                Log.dev(err);
+                resolve(false);
+            });
+        })
+
+    }
+
+    /**
+     * Sends string as a JSON file.
+     * @param {string} content 
+     * @param {string} caption 
+     * @param {string} filename 
+     * @returns {Promise<boolean>}
+     */
+    static sendStringAsJSONFile = (content, caption, filename) => {
+        return new Promise((resolve, reject) => {
+            TelegramEngine.#bot.sendDocument(Site.TG_CHAT_ID, Buffer.from(content, "utf8"), {
+                parse_mode: "MarkdownV2",
+                caption: TelegramEngine.sanitizeMessage(caption),
+            }, {
+                contentType: "application/json",
+                filename: filename,
+            }).then(r => {
+                resolve(true);
+            }).catch(err => {
+                Log.dev(err);
+                resolve(false);
+            });
         })
     }
 
