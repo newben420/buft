@@ -18,6 +18,19 @@ const {
     morningstar,
     hammerpattern,
     tweezerbottom,
+    abandonedbaby,
+    bullishengulfingpattern,
+    morningdojistar,
+    dragonflydoji,
+    bullishharami,
+    bullishmarubozu,
+    bullishharamicross,
+    bearishengulfingpattern,
+    eveningdojistar,
+    gravestonedoji,
+    bearishharami,
+    bearishmarubozu,
+    bearishharamicross,
 } = require("technicalindicators");
 const FFF = require("../lib/fff");
 const booleanConsolidator = require("../lib/boolean_consolidator");
@@ -244,6 +257,19 @@ class Analysis {
                     MST: null,
                     HMR: null,
                     TBT: null,
+                    ABB: null,
+                    BEP: null,
+                    EDS: null,
+                    GSD: null,
+                    BRH: null,
+                    BRM: null,
+                    BHC: null,
+                    BLE: null,
+                    MDS: null,
+                    DFD: null,
+                    BLH: null,
+                    BLM: null,
+                    BLC: null,
                     ATR: null,
                     ENTRY: null,
                 };
@@ -455,6 +481,71 @@ class Analysis {
                             cache.TBT = tweezerbottom(csd);
                         }
                     },
+                    ABB: () => {
+                        if (cache.ABB === null) {
+                            cache.ABB = abandonedbaby(csd);
+                        }
+                    },
+                    BLE: () => {
+                        if (cache.BLE === null) {
+                            cache.BLE = bullishengulfingpattern(csd);
+                        }
+                    },
+                    MDS: () => {
+                        if (cache.MDS === null) {
+                            cache.MDS = morningdojistar(csd);
+                        }
+                    },
+                    DFD: () => {
+                        if (cache.DFD === null) {
+                            cache.DFD = dragonflydoji(csd);
+                        }
+                    },
+                    BLH: () => {
+                        if (cache.BLH === null) {
+                            cache.BLH = bullishharami(csd);
+                        }
+                    },
+                    BLM: () => {
+                        if (cache.BLM === null) {
+                            cache.BLM = bullishmarubozu(csd);
+                        }
+                    },
+                    BLC: () => {
+                        if (cache.BLC === null) {
+                            cache.BLC = bullishharamicross(csd);
+                        }
+                    },
+                    BEP: () => {
+                        if (cache.BEP === null) {
+                            cache.BEP = bearishengulfingpattern(csd);
+                        }
+                    },
+                    EDS: () => {
+                        if (cache.EDS === null) {
+                            cache.EDS = eveningdojistar(csd);
+                        }
+                    },
+                    GSD: () => {
+                        if (cache.GSD === null) {
+                            cache.GSD = gravestonedoji(csd);
+                        }
+                    },
+                    BRH: () => {
+                        if (cache.BRH === null) {
+                            cache.BRH = bearishharami(csd);
+                        }
+                    },
+                    BRM: () => {
+                        if (cache.BRM === null) {
+                            cache.BRM = bearishmarubozu(csd);
+                        }
+                    },
+                    BHC: () => {
+                        if (cache.BHC === null) {
+                            cache.BHC = bearishharamicross(csd);
+                        }
+                    },
                     ATR: () => {
                         if (cache.ATR === null) {
                             const atr = ATR.calculate({ period: Site.IN_CFG.ATR_P ?? 14, close, high, low });
@@ -645,7 +736,7 @@ class Analysis {
                 signal.short = nshort;
                 signal.description = ndesc;
 
-                if ((buy && !nbuy) || (sell && !nsell)) {
+                if ((long && !nlong) || (short && !nshort)) {
                     signal.description = "No Signal";
                 }
 

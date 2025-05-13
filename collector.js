@@ -28,7 +28,7 @@ const tc = str => str.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toL
  */
 class Collector {
 
-    static #cacheId = `CL_${Site.CL_MAX_ROWS_PER_FETCH}_${Site.CL_ROWS}_${Site.TK_GRANULARITY}`;
+    static #cacheId = `CL_${Site.CL_ROWS}_${Site.TK_GRANULARITY}`;
 
     /**
      * @type {Record<string,Record<string, any[]>>}
