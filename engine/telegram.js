@@ -124,8 +124,23 @@ class TelegramEngine {
                 m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
                 const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                /**
+                 * @type {number}
+                 */
+                let tpROE;
+                /**
+                 * @type {number}
+                 */
+                let slROE = Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))) * -1;
+                if(order.manual){
+                    tpROE = Site.TR_MANUAL_STOPLOSS_PERC;
+                }
+                else{
+                    tpROE = ((order.sl * order.leverage) * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER);
+                }
                 m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
                 m += `liquidation ROE 💰 ${liquidationROE.toFixed(2)}%\n`;
+                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\n`;
                 m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
                 m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
                 m += `Current Price 💰 ${order.price || order.open_price}\n`;
