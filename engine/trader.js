@@ -166,6 +166,8 @@ class Trader {
                                     else {
                                         // valid
                                         const id = Trader.#generateOrderID();
+                                        const ord = new Order(symbol, id, signal.long ? "long" : "short", Date.now(), signal.tpsl, manual, signal.description);
+                                        Trader.#tempOrders.push(ord);
                                         const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
                                             symbol: symbol,
                                             productType: Site.TK_PRODUCT_TYPE,
@@ -178,18 +180,12 @@ class Trader {
                                             size: `${amt}`,
                                         });
                                         if (order.msg == "success") {
-                                            // save order to temporary orders
-                                            // on creation, update order details,
-                                            // on filled, move temporary order to orders
-                                            // implement timeout when order is not filled, it is filtered out of temp orders
-                                            // update order class to accomodate these changes
                                             Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
-                                            const order = new Order(symbol, id, signal.long ? "buy" : "sell", Date.now(), signal.tpsl, manual, signal.description);
-                                            Trader.#tempOrders.push(order);
                                             Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
                                             success = true;
                                         }
                                         else {
+                                            Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);
                                             Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
                                             if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${order.code} - ${order.msg}`);
                                         }
@@ -359,10 +355,11 @@ class Trader {
                             const ts = parseInt(pos.cTime) || Date.now();
                             const price = parseFloat(pos.openPriceAvg) || 0;
                             const side = pos.holdSide || "";
-                            const size = parseFloat(pos.marginSize) || 0;
+                            const size = parseFloat(pos.available) || 0;
                             const order = new Order(symbol, id, side, ts, Site.TR_RECOVERY_DEFULT_SL_PERC, false, "Recovery");
                             order.orderId = `${symbol}_RECOVERY`;
                             order.price = price;
+                            order.open_price = price;
                             order.size = size;
                             if (!Trader.#orders.find(x => x.symbol == symbol)) {
                                 Trader.#orders.push(order);
@@ -465,6 +462,7 @@ class Trader {
     static #createOrder = (symbol, side, tradeSide, ts, OID, COID, size) => {
         Log.flow(`Trader > ${symbol} > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Created.`, 1);
         if (tradeSide == "open") {
+            console.log(symbol, side, tradeSide, ts, OID, COID, size);
             const order = Trader.exactTempOrderFromID(COID);
             if (order) {
                 order.orderId = OID;
@@ -506,9 +504,12 @@ class Trader {
                 order.open_time = ts;
                 order.size = size;
                 order.price = price;
+                order.open_price = price;
                 Trader.#orders.push(order);
                 Trader.#tempOrders.splice(Trader.#tempOrders.findIndex(x => x.id == COID), 1);
+                // order.id = Trader.#generateOrderID();
                 Trader.sendMessage(`🚀 *Opened ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}`);
+                order.id = Trader.#generateOrderID();
             }
             else {
                 Log.flow(`Trader > ${symbol} > Opened > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order not found in temp.`, 1);
@@ -525,7 +526,7 @@ class Trader {
                 const netProfit = ((price - order.breakeven_price) / order.breakeven_price * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nReason 💬 ${order.close_reason}\nDuration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
+                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOpen Reason 💬 ${order.open_reason}\nClose Reason 💬 ${order.close_reason}\nDuration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
                 Trader.#orders.splice(Trader.#orders.findIndex(x => x.id == COID), 1);
             }
         }
@@ -561,6 +562,7 @@ class Trader {
                 order.least_roi = roi;
             }
 
+            
             // EXIT STRATEGY
             const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
             const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;

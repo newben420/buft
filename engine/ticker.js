@@ -123,7 +123,7 @@ class TickerEngine {
                         }
                         else {
                             Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
-                            TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
+                            TickerEngine.#tickers[symbol] = new Ticker(symbol);
                             resolve(true);
                         }
                     } catch (error) {

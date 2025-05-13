@@ -170,22 +170,24 @@ class Collector {
             const started = await Collector.#start();
             if (started) {
                 Log.flow(`Collector > Done running prerequisites.`, 0);
+                let kk = 1;
                 for (const symbol of Site.CL_SYMBOLS) {
-                    Log.flow(`Collector > ${symbol} > Obtaining data...`, 0);
+                    Log.flow(`${kk}. Collector > ${symbol} > Obtaining data...`, 0);
                     const data = await Collector.#fetchData(symbol);
                     if (data ? (data.length > 0) : false) {
-                        Log.flow(`Collector > ${symbol} > Data obtained.`, 0);
+                        Log.flow(`${kk}. Collector > ${symbol} > Data obtained.`, 0);
                         let t = 0;
                         for (let i = (Site.TK_MAX_ROWS - 1); i < data.length; i++) {
                             t++;
                             const d = data.slice((i + 1 - Site.TK_MAX_ROWS), (i + 1));
                             const signal = await Analysis.run(symbol, d);
                         }
-                        Log.flow(`Collector > ${symbol} > Analysis succeeded ${t} time${t == 1 ? "" : "s"}.`, 0);
+                        Log.flow(`${kk}. Collector > ${symbol} > Analysis succeeded ${t} time${t == 1 ? "" : "s"}.`, 0);
                     }
                     else {
-                        Log.flow(`Collector > ${symbol} > Failed to obtain data.`, 0);
+                        Log.flow(`${kk}. Collector > ${symbol} > Failed to obtain data.`, 0);
                     }
+                    kk++;
                 }
                 Collector.#colData = Analysis.collectedData;
                 await Collector.#stop();

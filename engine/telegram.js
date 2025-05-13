@@ -119,19 +119,20 @@ class TelegramEngine {
             for (const order of orders) {
                 let moji = ((order.side == "short" && order.price < order.open_price) || (order.side == "long" && order.price > order.open_price)) ? "🟢" : "🔴";
                 let m = `${moji} *${order.side.toUpperCase()} ${order.symbol}*\n`;
-                m += `⏱️ ${getTimeElapsed(order.open_time, Date.now())}\n`;
+                m += `⏱️ ${getTimeElapsed(order.open_time, Date.now())} 💬 ${order.open_reason}\n`;
                 m += `PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(order.gross_profit)}\n`;
                 m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
-                m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
-                m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
-                m += `Current Price 💰 ${order.price || order.open_price}\n`;
-                m += `Open Price 💰 ${order.open_price}\n`;
-                m += `Break Even Price 💰 ${order.breakeven_price}\n`;
-                m += `Liquidation Price 💰 ${order.liquidation_price}\n`;
                 const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
                 m += `liquidation ROE 💰 ${liquidationROE.toFixed(2)}%\n`;
+                m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
+                m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
+                m += `Current Price 💰 ${order.price || order.open_price}\n`;
+                m += `Open Price 💰 ${order.open_price}\n`;
+                m += `Break Even Price 💰 ${FFF(order.breakeven_price)}\n`;
+                m += `Liquidation Price 💰 ${FFF(order.liquidation_price)}\n`;
+                
                 m += `\n`;
                 message += m;
                 inline.push([{
