@@ -567,7 +567,7 @@ class Trader {
             const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
             const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
             if (!Trader.#isClosing[symbol] && Trader.#enabled) {
-                if ((order.roi < 0) && (order.sl > 0) && (Math.abs(order.roi) >= Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), order.sl)))))) {
+                if ((order.roi < 0) && (order.sl > 0) && (Math.abs(order.roi) >= Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))))) {
                     // stop loss condition fulfilled
                     order.close_reason = `Stop Loss ${FFF(order.sl)}%`;
                     Trader.closeOrder(symbol);
@@ -577,7 +577,7 @@ class Trader {
                     order.close_reason = `Manual Take Profit ${FFF(Site.TR_MANUAL_TAKEPROFIT_PERC)}%`;
                     Trader.closeOrder(symbol);
                 }
-                else if ((!order.manual) && (order.sl > 0) && (Site.TR_AUTOMATIC_TP_SL_MULTIPLIER > 0) && ((order.roi - breakEvenROE) >= (order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))) {
+                else if ((!order.manual) && (order.sl > 0) && (Site.TR_AUTOMATIC_TP_SL_MULTIPLIER > 0) && ((order.roi - breakEvenROE) >= ((order.sl * order.leverage) * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))) {
                     // Take profit for automatic orders
                     order.close_reason = `Auto Take Profit ${FFF((order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))}%`;
                     Trader.closeOrder(symbol);
