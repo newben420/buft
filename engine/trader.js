@@ -463,7 +463,6 @@ class Trader {
     static #createOrder = (symbol, side, tradeSide, ts, OID, COID, size) => {
         Log.flow(`Trader > ${symbol} > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Created.`, 1);
         if (tradeSide == "open") {
-            console.log(symbol, side, tradeSide, ts, OID, COID, size);
             const order = Trader.exactTempOrderFromID(COID);
             if (order) {
                 order.orderId = OID;
