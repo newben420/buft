@@ -31,6 +31,7 @@ const {
     bearishharami,
     bearishmarubozu,
     bearishharamicross,
+    KST,
 } = require("technicalindicators");
 const FFF = require("../lib/fff");
 const booleanConsolidator = require("../lib/boolean_consolidator");
@@ -218,6 +219,8 @@ class Analysis {
                     BLL_BULL: null,
                     BLL_BEAR: null,
                     BLL_BEAR: null,
+                    KST_BULL: null,
+                    KST_BEAR: null,
                     SMA_BULL: null,
                     SMA_BEAR: null,
                     EMA_BULL: null,
@@ -355,6 +358,29 @@ class Analysis {
                             const ma = SMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
                             cache.SMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
                             cache.SMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                        }
+                    },
+                    KST: () => {
+                        if (cache.KST_BULL === null) {
+                            const kst = KST.calculate({
+                                ROCPer1: Site.IN_CFG.KST_RP1 ?? 10,
+                                ROCPer2: Site.IN_CFG.KST_RP2 ?? 15,
+                                ROCPer3: Site.IN_CFG.KST_RP3 ?? 20,
+                                ROCPer4: Site.IN_CFG.KST_RP4 ?? 30,
+                                signalPeriod: Site.IN_CFG.KST_SGP ?? 9,
+                                SMAROCPer1: Site.IN_CFG.KST_SP1 ?? 10,
+                                SMAROCPer2: Site.IN_CFG.KST_SP2 ?? 10,
+                                SMAROCPer3: Site.IN_CFG.KST_SP3 ?? 10,
+                                SMAROCPer4: Site.IN_CFG.KST_SP4 ?? 15,
+                                values: close,
+                            });
+            
+                            const bull = (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > ((kst[kst.length - 1] || {}).signal || 0))
+                            && (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > 0);
+                            const bear = (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < ((kst[kst.length - 1] || {}).signal || 0))
+                            && (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < 0);
+                            cache.KST_BULL = bull;
+                            cache.KST_BEAR = bear;
                         }
                     },
                     EMA: () => {
