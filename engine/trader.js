@@ -7,6 +7,7 @@ const Site = require("../site");
 const Account = require("./account");
 const BitgetEngine = require("./bitget");
 const generateLowercaseAlphanumeric = require("../lib/unique_string");
+const DupSig = require("./dup_sig");
 
 /**
  * Manages trades and signal exec.
@@ -94,7 +95,7 @@ class Trader {
     * @param {Signal} signal 
     */
     static newSignal = (symbol, signal) => {
-        if (signal.long || signal.short) {
+        if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`)) :false) {
             Trader.openOrder(symbol, signal);
         }
     }
@@ -184,6 +185,9 @@ class Trader {
                                             Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
                                             Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
                                             success = true;
+                                            if(!manual){
+                                                DupSig.add(`${signal.long ? `LONG` : `SHORT`}${symbol}`);
+                                            }
                                         }
                                         else {
                                             Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);

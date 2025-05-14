@@ -84,6 +84,10 @@ class Site {
     static BG_API_SECRET = process.env.BG_API_SECRET || "";
     static BG_API_PASSPHRASE = process.env.BG_API_PASSPHRASE || "";
 
+    static DS_USE = (process.env.DS_USE || "").toLowerCase() == "true";
+    static DS_MAX_SIGNS = parseInt(process.env.DS_MAX_SIGNS || "0") || 10;
+    static DS_MAX_DURATION_MS = parseInt(process.env.DS_MAX_DURATION_MS || "0") || Infinity;
+
 }
 
 module.exports = Site;
