@@ -115,6 +115,7 @@ class Trader {
      */
     static openOrder = (symbol, signal, manual = false) => {
         return new Promise(async (resolve, reject) => {
+            Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
             const index = (Trader.#orders.findIndex(x => x.symbol == symbol) < 0) && (Trader.#tempOrders.findIndex(x => x.symbol == symbol) < 0);
             if ((manual ? true : Trader.#enabled) && index && Trader.#orders.length < Site.TR_GRID_LENGTH) {
                 // Signal can be executed
@@ -507,8 +508,14 @@ class Trader {
                 order.open_price = price;
                 Trader.#orders.push(order);
                 Trader.#tempOrders.splice(Trader.#tempOrders.findIndex(x => x.id == COID), 1);
+                let m = `🚀 *Opened ${side.toUpperCase()} Order*\n\n`;
+                m += `Ticker 💲 ${symbol}\n`;
+                m += `Order 🆔 \`${OID}\`\n`;
+                m += `Client Order 🆔 \`${COID}\`\n`;
+                m += `Size 💰 ${size}\n`;
+                m += `Price 💰 ${price}\n`;
                 // order.id = Trader.#generateOrderID();
-                Trader.sendMessage(`🚀 *Opened ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}`);
+                Trader.sendMessage(m);
                 order.id = Trader.#generateOrderID();
             }
             else {
@@ -526,7 +533,39 @@ class Trader {
                 const netProfit = ((price - order.breakeven_price) / order.breakeven_price * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
                 order.net_profit = netProfit;
                 Log.flow(`Trader > ${symbol} > Closed > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled > Gross PnL: ${Site.TK_MARGIN_COIN} ${profit.toFixed(2)} | Net: ${netProfit.toFixed(2)}%.`, 1);
-                Trader.sendMessage(`${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\nTicker 💲 ${symbol}\nOpen Reason 💬 ${order.open_reason}\nClose Reason 💬 ${order.close_reason}\nDuration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\nOrder 🆔 \`${OID}\`\nClient Order 🆔 \`${COID}\`\nSize 💰 ${size}\nPrice 💰 ${price}\nGross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \nNet Profit 💰 ${netProfit.toFixed(2)}%\nROE 💰 ${order.roi.toFixed(2)}%\nPeak ROE 💰 ${order.peak_roi.toFixed(2)}%\nLeast ROE 💰 ${order.least_roi.toFixed(2)}%\n`);
+                const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
+                /**
+                 * @type {number}
+                 */
+                let tpROE;
+                /**
+                 * @type {number}
+                 */
+                let slROE = Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))) * -1;
+                if (order.manual) {
+                    tpROE = Site.TR_MANUAL_STOPLOSS_PERC;
+                }
+                else {
+                    tpROE = ((order.sl * order.leverage) * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER);
+                }
+                let m = ``;
+                m += `${profit > 0 ? `🟢` : `🔴`}  *Closed ${side.toUpperCase()} Order*\n\n`;
+                m += `Ticker 💲 ${symbol}\n`;
+                m += `Open Reason 💬 ${order.open_reason}\n`;
+                m += `Close Reason 💬 ${order.close_reason}\n`;
+                m += `Duration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\n`;
+                m += `Order 🆔 \`${OID}\`\n`;
+                m += `Client Order 🆔 \`${COID}\`\n`;
+                m += `Size 💰 ${size}\n`;
+                m += `Price 💰 ${price}\n`;
+                m += `Gross Profit 💰 ${Site.TK_MARGIN_COIN} ${FFF(profit)} \n`;
+                m += `Net Profit 💰 ${netProfit.toFixed(2)}%\n`;
+                m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
+                m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
+                m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
+                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\\(${FFF((order.sl * order.leverage) || 0)}\\%)\n`;
+                Trader.sendMessage(m);
                 Trader.#orders.splice(Trader.#orders.findIndex(x => x.id == COID), 1);
             }
         }
@@ -562,7 +601,7 @@ class Trader {
                 order.least_roi = roi;
             }
 
-            
+
             // EXIT STRATEGY
             const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
             const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
