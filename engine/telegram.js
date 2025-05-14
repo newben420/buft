@@ -11,6 +11,8 @@ const Account = require('./account');
 const Signal = require('../model/signal');
 const BitgetEngine = require('./bitget');
 
+const START_TIME = Date.now();
+
 process.env.NTBA_FIX_350 = true;
 
 class TelegramEngine {
@@ -257,7 +259,7 @@ class TelegramEngine {
                 const pid = msg.chat.id || msg.from.id;
                 if (pid && pid == Site.TG_CHAT_ID) {
                     if (/^\/start$/.test(content)) {
-                        TelegramEngine.sendMessage(`${Site.TITLE} says hi 👋`);
+                        TelegramEngine.sendMessage(`*${Site.TITLE}* says hi 👋\n\n*${Site.TITLE}* has been awake for ${getTimeElapsed(START_TIME, Date.now())}`);
                     }
                     else if (/^\/stats$/.test(content)) {
                         const { message, inline } = TelegramEngine.#getStatsContent();
