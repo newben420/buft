@@ -564,7 +564,7 @@ class Trader {
                 m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
                 m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
                 m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
-                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\\(${FFF((order.sl * order.leverage) || 0)}\\%)\n`;
+                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\\(${FFF((order.sl * order.leverage) || 0)}%\\)\n`;
                 Trader.sendMessage(m);
                 Trader.#orders.splice(Trader.#orders.findIndex(x => x.id == COID), 1);
             }

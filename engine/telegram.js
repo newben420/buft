@@ -140,7 +140,7 @@ class TelegramEngine {
                 }
                 m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
                 m += `liquidation ROE 💰 ${liquidationROE.toFixed(2)}%\n`;
-                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\\(${FFF((order.sl * order.leverage) || 0)}\\%)\n`;
+                m += `TPSL 💰 ${FFF(tpROE || 0)}% ${FFF(slROE || 0)}%\\(${FFF((order.sl * order.leverage) || 0)}%\\)\n`;
                 m += `Peak ROE 💰 ${order.peak_roi.toFixed(2)}%\n`;
                 m += `Least ROE 💰 ${order.least_roi.toFixed(2)}%\n`;
                 m += `Current Price 💰 ${order.price || order.open_price}\n`;
