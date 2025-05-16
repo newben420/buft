@@ -748,6 +748,7 @@ class Analysis {
 
                 stoploss = step6();
                 // Stop loss computed.
+                // Object.keys(ensureInd).forEach(key => ensureInd[key]());
 
 
                 const signal = new Signal(short, long, desc, cache.ATR, stoploss, latestRate);

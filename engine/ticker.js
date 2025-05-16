@@ -15,6 +15,12 @@ class TickerEngine {
     static #tickers = {};
 
     /**
+     * @param {string} symbol 
+     * @returns {Ticker}
+     */
+    static getTicker = (symbol) => TickerEngine.#tickers[symbol];
+
+    /**
      * Get tickers' length
      * @returns {number}
      */

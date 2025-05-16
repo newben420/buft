@@ -9,6 +9,8 @@ const BitgetEngine = require("./bitget");
 const generateLowercaseAlphanumeric = require("../lib/unique_string");
 const DupSig = require("./dup_sig");
 
+let SigSmooth = null;
+
 /**
  * Manages trades and signal exec.
  */
@@ -95,7 +97,10 @@ class Trader {
     * @param {Signal} signal 
     */
     static newSignal = (symbol, signal) => {
-        if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`)) :false) {
+        if(!SigSmooth){
+            SigSmooth = require("./sigsmooth");
+        }
+        if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`) && SigSmooth.entry(symbol, signal)) :false) {
             Trader.openOrder(symbol, signal);
         }
     }

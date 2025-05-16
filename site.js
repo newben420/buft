@@ -24,7 +24,7 @@ class Site {
     static TK_AUTO_SYMBOLS = (process.env.TK_AUTO_SYMBOLS || "").split(" ").filter(x => x.length > 0);
     static TK_MAX = parseInt(process.env.TK_MAX || "100");
     static TK_GRANULARITY = process.env.TK_GRANULARITY || "1m";
-    static TK_INTERVAL = reverseGranularity(Site.TK_GRANULARITY);
+    static TK_INTERVAL = reverseGranularity(Site.TK_GRANULARITY) || 300000;
     static TK_MAX_ROWS = parseInt(process.env.TK_MAX_ROWS || "100");
     static TK_LEVERAGE_LONG = process.env.TK_LEVERAGE_LONG || "5";
     static TK_LEVERAGE_SHORT = process.env.TK_LEVERAGE_SHORT || "5";
@@ -87,6 +87,9 @@ class Site {
     static DS_USE = (process.env.DS_USE || "").toLowerCase() == "true";
     static DS_MAX_SIGNS = parseInt(process.env.DS_MAX_SIGNS || "0") || 10;
     static DS_MAX_DURATION_MS = parseInt(process.env.DS_MAX_DURATION_MS || "0") || Infinity;
+
+    static SS_USE = (process.env.SS_USE || "").toLowerCase() == "true";
+    static SS_LONE_MAX_DURATION_MS = parseInt(process.env.SS_LONE_MAX_DURATION_MS || "0") || 3600000;
 
 }
 
