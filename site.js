@@ -18,6 +18,7 @@ class Site {
     static FLOW_LOG_MAX_PRIORITY = parseInt(process.env.FLOW_LOG_MAX_PRIORITY || "5");
     static EXIT_ON_UNCAUGHT_EXCEPTION = (process.env.EXIT_ON_UNCAUGHT_EXCEPTION || "").toLowerCase() == "true";
     static EXIT_ON_UNHANDLED_REJECTION = (process.env.EXIT_ON_UNHANDLED_REJECTION || "").toLowerCase() == "true";
+    static BROADCAST = (process.env.BROADCAST || "").toLowerCase() == "true";
 
     static TK_PRODUCT_TYPE = process.env.TK_PRODUCT_TYPE || "";
     static TK_MARGIN_COIN = process.env.TK_MARGIN_COIN || "USDT";

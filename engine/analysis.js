@@ -4,6 +4,7 @@ const Multilayered = require("../model/multilayered");
 const Signal = require("../model/signal");
 const Site = require("../site");
 const fs = require("fs");
+let BroadcastEngine = null;
 const {
     MACD, PSAR, Stochastic, bullish, bearish, VWAP, ADL, ATR, AwesomeOscillator,
     TRIX, ADX, CCI, MFI, RSI, darkcloudcover,
@@ -773,6 +774,12 @@ class Analysis {
 
                 // CONCLUDE ANALYSIS
                 Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"} | Price: ${FFF(latestRate)}${stoploss ? ` | Stoploss: ${FFF(stoploss)}` : ""}.`, 5);
+                if((signal.long || signal.short) && Site.BROADCAST){
+                    if(!BroadcastEngine){
+                        BroadcastEngine = require("./broadcast");
+                    }
+                    BroadcastEngine.entry(symbol, structuredClone(signal));
+                }
                 // CONVERT STOP LOSS TO PERCENTAGE AND FIT WITHIN RANGE
                 signal.tpsl = Math.floor(Math.abs((latestRate - signal.tpsl) / latestRate * 100) * 100) / 100;
                 resolve(signal);
