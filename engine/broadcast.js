@@ -18,8 +18,8 @@ class BroadcastEngine {
         m += `Ticker 💲 ${ticker}\n`;
         m += `Type 👉 ${signal.long ? "Long" : "Short"}\n`;
         m += `Description 💬 ${signal.description}\n`;
-        m += `Mark Price 🏷️ ${FFF(signal.markPrice)}\n`;
-        m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl)}\n`;
+        m += `Mark Price 🏷️ ${FFF(signal.markPrice, 6)}\n`;
+        m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl, 6)}\n`;
         m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%`;
 
         TelegramEngine.sendMessage(m);
