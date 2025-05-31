@@ -100,8 +100,10 @@ class Trader {
         if(!SigSmooth){
             SigSmooth = require("./sigsmooth");
         }
-        if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`) && SigSmooth.entry(symbol, signal)) :false) {
-            Trader.openOrder(symbol, signal);
+        if(Trader.#enabled){
+            if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`) && SigSmooth.entry(symbol, signal)) :false) {
+                Trader.openOrder(symbol, signal);
+            }
         }
     }
 
