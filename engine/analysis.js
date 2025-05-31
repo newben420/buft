@@ -374,11 +374,10 @@ class Analysis {
                                 SMAROCPer4: Site.IN_CFG.KST_SP4 ?? 15,
                                 values: close,
                             });
-            
                             const bull = (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > ((kst[kst.length - 1] || {}).signal || 0))
-                            && (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > 0);
+                                && (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > 0);
                             const bear = (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < ((kst[kst.length - 1] || {}).signal || 0))
-                            && (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < 0);
+                                && (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < 0);
                             cache.KST_BULL = bull;
                             cache.KST_BEAR = bear;
                         }
@@ -611,8 +610,8 @@ class Analysis {
                 }
 
                 /**
-                 * Confirms bull trend.
-                 * @returns {boolean} True if bull trend else False.
+                 * Confirms trend.
+                 * @returns {boolean} True if trend else False.
                  */
                 const step2 = () => {
                     for (let i = 0; i < Site.STR_TREND_IND.length; i++) {
