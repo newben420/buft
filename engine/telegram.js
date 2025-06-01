@@ -386,6 +386,16 @@ class TelegramEngine {
                             }
                         }
                     }
+                    else if(/^([\d]+)(\.[\d]+)?$/.test(content)){
+                        const cap = parseFloat(content) || 0;
+                        if(cap && cap > 0 && cap <= Account.getBalance()){
+                            Trader.tempCapital = cap;
+                            TelegramEngine.sendMessage(`✅ Temporary capital set to \`${Site.TK_MARGIN_COIN} ${content}\`\n\nIt will be used for the next order`);
+                        }
+                        else{
+                            TelegramEngine.sendMessage(`❌ Could not set temporary capital to \`${Site.TK_MARGIN_COIN} ${content}\`\n\nValue must be greater than 0 and must be less than or equal to current account balance`);
+                        }
+                    }
                     else {
                         TelegramEngine.sendMessage(`😔 *${Site.TITLE}* could not understand your last message\n\nSend a ticker symbol or more e.g. "BTCUSDT ETHUSDT" to add it to tickers\n\nSend "lever=[value]" e.g. lever=20 to change leverages for all tickers in current margin mode`);
                     }

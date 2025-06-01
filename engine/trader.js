@@ -23,6 +23,12 @@ class Trader {
     static #enabled = Site.TR_AUTO_ENABLED;
 
     /**
+     * If set, is used instead of normal calculated capital for the next trade, then reset
+     * @type {number}
+     */
+    static tempCapital = 0;
+
+    /**
      * Generates a unique unused order id.
      * @returns {string} Unique order ID
      */
@@ -130,7 +136,8 @@ class Trader {
                 if (!Trader.#isOpening) {
                     Trader.#isOpening = true;
                     const balance = Account.getBalance();
-                    const capital = Math.min(Site.TR_MAX_CAPITAL_MCOIN, Math.max(0, balance / (Site.TR_GRID_LENGTH - Trader.#orders.length)));
+                    const capital = (Trader.tempCapital && Trader.tempCapital > 0 && Trader.tempCapital <= balance) ? Trader.tempCapital : Math.min(Site.TR_MAX_CAPITAL_MCOIN, Math.max(0, balance / (Site.TR_GRID_LENGTH - Trader.#orders.length)));
+                    Trader.tempCapital = 0;
                     Log.flow(`Trader > Open > ${symbol} > ${signal.long ? "LONG" : "SHORT"} > Balance: ${FFF(balance)} | Capital: ${FFF(capital)}.`, 3);
                     if (capital > 0) {
                         // Capital is tangible
