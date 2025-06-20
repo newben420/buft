@@ -1,4 +1,5 @@
 const FFF = require("../lib/fff");
+const TelegramBot = require('node-telegram-bot-api');
 
 let TelegramEngine = null;
 /**
@@ -22,7 +23,25 @@ class BroadcastEngine {
         m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl, 6)}\n`;
         m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%`;
 
-        TelegramEngine.sendMessage(m);
+        /**
+         * @type {TelegramBot.InlineKeyboardButton[][]}
+         */
+        let inline = [[
+        ], [
+            {
+                text: `Create Order`,
+                callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
+            }
+        ]];
+
+        TelegramEngine.sendMessage(m, mid => {
+        }, {
+            parse_mode: "MarkdownV2",
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: inline,
+            }
+        });
     }
 }
 
