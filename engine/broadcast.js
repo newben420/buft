@@ -88,7 +88,7 @@ class BroadcastEngine {
         m += `Description 💬 ${signal.description}\n`;
         m += `Mark Price 🏷️ ${FFF(signal.markPrice, 6)}\n`;
         m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl, 6)}\n`;
-        m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%`;
+        m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%\n`;
         m += `Occurrence 🔄 ${formatNumber(BroadcastEngine.#occ[ticker].getCount())}`;
 
         /**
