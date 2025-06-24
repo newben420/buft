@@ -1,6 +1,10 @@
 const FFF = require("../lib/fff");
 const TelegramBot = require('node-telegram-bot-api');
 const formatNumber = require("../lib/format_number");
+const Site = require("../site");
+const { GroqEngine } = require("./groq");
+const Log = require("../lib/log");
+const getTimeElapsed = require("../lib/get_time_elapsed");
 
 /**
  * Helps track recurring signals.
@@ -23,15 +27,15 @@ class Occurrence {
      * Updates count and signal.
      * @param {boolean} isLong 
      */
-    update(isLong){
+    update(isLong) {
         /**
          * @type {'long'|'short'}
          */
         const newSignal = isLong ? "long" : "short";
-        if(newSignal == this.signal){
+        if (newSignal == this.signal) {
             this.count++;
         }
-        else{
+        else {
             this.signal = newSignal;
             this.count = 1;
         }
@@ -41,7 +45,7 @@ class Occurrence {
      * Get count of the current signal's occurence.
      * @returns {number}
      */
-    getCount(){
+    getCount() {
         return this.count;
     }
 
@@ -49,7 +53,7 @@ class Occurrence {
      * Obj const.
      * @param {boolean} isLong 
      */
-    constructor(isLong){
+    constructor(isLong) {
         this.signal = isLong ? "long" : "short";
         this.count = 1;
     }
@@ -71,17 +75,20 @@ class BroadcastEngine {
      * Signals are passed here from analysis
      * @param {string} ticker 
      * @param {Record<string, any>} signal 
+     * @param {string[][]} rawPrompt
      */
-    static entry = (ticker, signal) => {
-        if(!TelegramEngine){
+    static entry = async (ticker, signal, rawPrompt) => {
+        if (!TelegramEngine) {
             TelegramEngine = require("./telegram");
         }
-        if(!BroadcastEngine.#occ[ticker]){
+        if (!BroadcastEngine.#occ[ticker]) {
             BroadcastEngine.#occ[ticker] = new Occurrence(signal.long);
         }
-        else{
+        else {
             BroadcastEngine.#occ[ticker].update(signal.long);
         }
+
+        const occurence = BroadcastEngine.#occ[ticker].getCount();
         let m = `📣 *Signal Broadcast*\n\n`;
         m += `Ticker 💲 ${ticker}\n`;
         m += `Type 👉 ${signal.long ? "Long" : "Short"}\n`;
@@ -89,7 +96,13 @@ class BroadcastEngine {
         m += `Mark Price 🏷️ ${FFF(signal.markPrice, 6)}\n`;
         m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl, 6)}\n`;
         m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%\n`;
-        m += `Occurrence 🔄 ${formatNumber(BroadcastEngine.#occ[ticker].getCount())}`;
+        m += `Occurrence 🔄 ${formatNumber(occurence)}`;
+
+        const verdict = await BroadcastEngine.#computePrompt(ticker, signal, rawPrompt, occurence);
+
+        if(verdict){
+            m += `\n\n🤖 AI Verdict\n\`\`\`${verdict}\`\`\``;
+        }
 
         /**
          * @type {TelegramBot.InlineKeyboardButton[][]}
@@ -109,6 +122,130 @@ class BroadcastEngine {
             reply_markup: {
                 inline_keyboard: inline,
             }
+        });
+    }
+
+    /**
+     * Keeps track of successful AI prompts to be used in successive ones.
+     * @type {Record<string, {ts: number, supported: boolean, confidence: number, long: boolean, price: number}[]>}
+     */
+    static #aiHistory = {}
+
+    /**
+     * Handles prompt activity for a signal.
+     * @param {string} ticker 
+     * @param {Record<string, any>} signal 
+     * @param {string[][]} rawPrompt
+     * @param {number} occurence
+     * @returns {Promise<string|null>}
+     */
+    static #computePrompt = (ticker, signal, rawPrompt, occurence) => {
+        return new Promise((resolve, reject) => {
+            if (!BroadcastEngine.#aiHistory[ticker]) {
+                BroadcastEngine.#aiHistory[ticker] = [];
+            }
+            let prompt = [
+                {
+                    role: "system",
+                    content: "",
+                },
+                {
+                    role: "user",
+                    content: "",
+                },
+            ];
+
+            prompt[0].content += `You are ${Site.TITLE || "Bennie"}, a professional and reliable trading assistant with deep understanding of trading indicators and strategies, especially for BitGet USDT Futures.`;
+            prompt[0].content += `\n\nYou will be given structured technical data, analysis steps, and recent signal history. Your task is to reason through them and determine if the current trade signal should be supported.`;
+            prompt[0].content += `\n\nRespond ONLY with a strict JSON object. Do not add any extra text before or after. Use this format:`;
+            prompt[0].content += `\n\n{\n\t"supported": boolean,\n\t"reason": string,\n\t"confidence": number (0 to 100)\n}`;
+            prompt[0].content += `\n\nExample:\n{\n\t"supported": true,\n\t"reason": "The ADX shows strong trend strength and no reversal patterns are detected, supporting the short signal.",\n\t"confidence": 84\n}`;
+
+            prompt[1].content += `#INPUT\n${rawPrompt[0].join("\n")}`;
+
+            if (BroadcastEngine.#aiHistory[ticker].length > 0) {
+                prompt[1].content += `\n\n## PREVIOUS SIGNALS`;
+                prompt[1].content += `\nEach includes the trade type, time since generation, mark price, and your verdict at the time.`;
+                for (let i = 0; i < BroadcastEngine.#aiHistory[ticker].length; i++) {
+                    const row = BroadcastEngine.#aiHistory[ticker][i];
+                    prompt[1].content += `\n${(i + 1)}. [${row.long ? "LONG" : "SHORT"}] | ${getTimeElapsed(row.ts, Date.now())} ago | Mark Price: ${row.price} | Verdict: ${row.supported ? "Supported" : "Rejected"} (Confidence: ${row.confidence})`;
+                }
+            }
+
+            prompt[1].content += `\n\n## CURRENT INDICATOR ANALYSIS`;
+            for (let i = 1; i <= 7; i++) {
+                const data = rawPrompt[i];
+                switch (i) {
+                    case 1:
+                        prompt[1].content += `\n\n### STEP 1 - Entry Point`;
+                        prompt[1].content += `\nTrend/momentum switch detection using a single indicator.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    case 2:
+                        prompt[1].content += `\n\n### STEP 2 - Trend Direction`;
+                        prompt[1].content += `\nDetermined using multiple trend indicators.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    case 3:
+                        prompt[1].content += `\n\n### STEP 3 - Trend Strength`;
+                        prompt[1].content += `\nMeasured by ADX. Strong if ADX >= 25.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    case 4:
+                        prompt[1].content += `\n\n### STEP 4 - Reversal Detection (Overbought/Oversold)`;
+                        prompt[1].content += `\nChecks if market conditions could reverse the signal.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    case 5:
+                        prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
+                        prompt[1].content += `\nDetects candlestick patterns opposing the signal.`;
+                        prompt[1].content += `${data.length ? `Detected patterns: ${data.join(", ")}.` : 'No detected patterns.'}`;
+                        break;
+                    case 6:
+                        prompt[1].content += `\n\n### STEP 6 - Stop Loss`;
+                        prompt[1].content += `\nStop loss price calculated using a volatility or trend-based indicator.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    case 7:
+                        prompt[1].content += `\n\n### STEP 7 - Volatility %`;
+                        prompt[1].content += `\nComputed using ATR and expressed as a percentage of current price.`;
+                        prompt[1].content += `${data.join("\n")}`;
+                        break;
+                    default:
+                    // do nothing
+                }
+            }
+
+            prompt[1].content += `\n\n## SIGNAL\nThe trading script now proposes a **${signal.long ? "LONG" : "SHORT"}** signal. ${occurence > 1 ? `The same signal has occurred ${occurence} times consecutively.` : ''}`;
+
+            prompt[1].content += `\n\n## TASK\nReturn a JSON object only with:\n- \"supported\`: true or false\n- "reason": one-paragraph reasoning\n- "confidence": a number from 0–100`;
+
+
+            console.log(prompt);
+
+            GroqEngine.request({
+                prompt,
+                callback(r) {
+                    if (r.succ) {
+                        try {
+                            const { supported, reason, confidence } = JSON.parse(r.message);
+                            const row = { ts: Date.now(), supported: supported, confidence: confidence, long: signal.long, price: signal.markPrice };
+
+                            BroadcastEngine.#aiHistory[ticker].push(row);
+                            if (BroadcastEngine.#aiHistory[ticker].length > Site.GROQ_MAX_HISTORY_COUNT) {
+                                BroadcastEngine.#aiHistory[ticker] = BroadcastEngine.#aiHistory[ticker].slice(BroadcastEngine.#aiHistory[ticker].length - Site.GROQ_MAX_HISTORY_COUNT);
+                            }
+                            resolve(`Supported: ${supported ? 'Yes' : 'No'}\nReason: ${reason}\nConfidence: ${confidence}`);
+                        } catch (error) {
+                            Log.dev(error);
+                            resolve(null);
+                        }
+                    }
+                    else {
+                        resolve(null);
+                    }
+                },
+            });
         });
     }
 }

@@ -67,6 +67,7 @@ class Site {
     static TR_RECOVERY_DEFULT_SL_PERC = parseFloat(process.env.TR_RECOVERY_DEFULT_SL_PERC || "0") || 100;
     static TR_AUTO_SELL = (process.env.TR_AUTO_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ pnl: x[0] || 0, minDurationMS: x[1] || 0, maxDurationMS: x[2] || Infinity})).filter(x => x.pnl != 0 && x.minDurationMS > 0 && x.maxDurationMS > 0 && x.maxDurationMS >= x.minDurationMS);
     static TR_PEAK_DROP = (process.env.TR_PEAK_DROP || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity})).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
+    static TR_PEAK_DROP_MANUAL = (process.env.TR_PEAK_DROP_MANUAL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity})).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
     static TR_TEMP_ORDERS_MAX_DURATION_MS = parseFloat(process.env.TR_TEMP_ORDERS_MAX_DURATION_MS || "0") || 600000;
 
     static FI_SAVE_PATH = process.env.FI_SAVE_PATH || "";
@@ -91,6 +92,15 @@ class Site {
 
     static SS_USE = (process.env.SS_USE || "").toLowerCase() == "true";
     static SS_LONE_MAX_DURATION_MS = parseInt(process.env.SS_LONE_MAX_DURATION_MS || "0") || 3600000;
+
+    static GROQ_KEY = process.env["GROQ_KEY"] || "";
+    static GROQ_ENDPOINT = process.env["GROQ_ENDPOINT"] || "";
+    static GROQ_MODELS = (process.env["GROQ_MODELS"] || "").split(" ").filter(x => x.length > 0);
+    static GROQ_REQUEST_TIMEOUT_MS = parseInt(process.env["GROQ_REQUEST_TIMEOUT_MS"] || "0") || Infinity;
+    static GROQ_MAX_RETRIES = parseInt(process.env["GROQ_MAX_RETRIES"] || "0") || 1;
+    static GROQ_HTTP_TIMEOUT_MS = parseInt(process.env["GROQ_HTTP_TIMEOUT_MS"] || "0") || 60000;
+    static GROQ_USE = (process.env["GROQ_USE"] || "").toLowerCase() == "true";
+    static GROQ_MAX_HISTORY_COUNT = parseInt(process.env["GROQ_MAX_HISTORY_COUNT"] || "0") || 5;
 
 }
 

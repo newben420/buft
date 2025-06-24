@@ -121,7 +121,7 @@ class TelegramEngine {
             for (const order of orders) {
                 let moji = ((order.side == "short" && order.price < order.open_price) || (order.side == "long" && order.price > order.open_price)) ? "🟢" : "🔴";
                 let m = `${moji} *${order.side.toUpperCase()} ${order.symbol}*\n`;
-                m += `⏱️ ${getTimeElapsed(order.open_time, Date.now())} 💬 ${order.open_reason}\n`;
+                m += `⏱️ ${getTimeElapsed(order.open_time, Date.now())} 🔼 ${getTimeElapsed(order.peak_ts, Date.now())} 🔽 ${getTimeElapsed(order.least_ts, Date.now())} 💬 ${order.open_reason}\n`;
                 m += `PnL 💰 ${Site.TK_MARGIN_COIN} ${FFF(order.gross_profit)}\n`;
                 m += `ROE 💰 ${order.roi.toFixed(2)}%\n`;
                 const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;

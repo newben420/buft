@@ -48,7 +48,17 @@ class Order {
     /**
      * @type {number}
      */
+    peak_ts;
+
+    /**
+     * @type {number}
+     */
     least_roi;
+
+    /**
+     * @type {number}
+     */
+    least_ts;
 
     /**
      * @type {number}
@@ -144,6 +154,8 @@ class Order {
         this.roi = 0;
         this.peak_roi = 0;
         this.least_roi = 0;
+        this.peak_ts = 0;
+        this.least_ts = 0;
         this.liquidation_price = 0;
         this.breakeven_price = 0;
         this.size = 0;

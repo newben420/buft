@@ -520,6 +520,8 @@ class Trader {
             if (order) {
                 Log.flow(`Trader > ${symbol} > Opened > ${side.toUpperCase()} > ${tradeSide.toUpperCase()} > Order Filled.`, 1);
                 order.open_time = ts;
+                order.peak_ts = ts;
+                order.least_ts = ts;
                 order.size = size;
                 order.price = price;
                 order.open_price = price;
@@ -613,9 +615,11 @@ class Trader {
             order.roi = roi;
             if (order.peak_roi == 0 || roi > order.peak_roi) {
                 order.peak_roi = roi;
+                order.peak_ts = Date.now();
             }
             if (order.least_roi == 0 || roi < order.least_roi) {
                 order.least_roi = roi;
+                order.least_ts = Date.now();
             }
 
 
@@ -637,6 +641,23 @@ class Trader {
                     // Take profit for automatic orders
                     order.close_reason = `Auto Take Profit ${FFF((order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))}%`;
                     Trader.closeOrder(symbol);
+                }
+                else if(order.manual){
+                    let exitAlready = false;
+                    let duration = (Date.now - order.open_time) || 0;
+                    let drop = (order.peak_roi - order.roi) || 0;
+                    // MANUAL PEAK DROP
+                    if (!exitAlready) {
+                        for (let i = 0; i < Site.TR_PEAK_DROP_MANUAL.length; i++) {
+                            let p = Site.TR_PEAK_DROP_MANUAL[i];
+                            if ((drop >= p.minDrop) && (drop <= p.maxDrop) && ((order.roi - breakEvenROE) >= p.minPnL) && ((order.roi - breakEvenROE) <= p.maxPnL)) {
+                                exitAlready = true;
+                                order.close_reason = `Auto PeakDrop ${(i + 1)}`;
+                                Trader.closeOrder(symbol);
+                                break;
+                            }
+                        }
+                    }
                 }
                 else if (!order.manual) {
                     // Exit strategies for automated orders
