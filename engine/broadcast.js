@@ -220,11 +220,8 @@ class BroadcastEngine {
 
             prompt[1].content += `\n\n## TASK\nReturn a JSON object only with:\n- \"supported\`: true or false\n- "reason": one-paragraph reasoning\n- "confidence": a number from 0–100`;
 
-
-            console.log(prompt);
-
             GroqEngine.request({
-                prompt,
+                messages: prompt,
                 callback(r) {
                     if (r.succ) {
                         try {
