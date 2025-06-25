@@ -100,7 +100,7 @@ class BroadcastEngine {
 
         const verdict = await BroadcastEngine.#computePrompt(ticker, signal, rawPrompt, occurence);
 
-        if(verdict){
+        if (verdict) {
             m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict}\`\`\``;
         }
 
@@ -163,61 +163,69 @@ class BroadcastEngine {
 
             prompt[1].content += `# INPUT\n${rawPrompt[0].join("\n")}`;
 
-            if (BroadcastEngine.#aiHistory[ticker].length > 0) {
-                prompt[1].content += `\n\n## PREVIOUS SIGNALS`;
-                prompt[1].content += `\nEach includes the trade type, time since generation, mark price, and your verdict at the time.`;
-                for (let i = 0; i < BroadcastEngine.#aiHistory[ticker].length; i++) {
-                    const row = BroadcastEngine.#aiHistory[ticker][i];
-                    prompt[1].content += `\n${(i + 1)}. [${row.long ? "LONG" : "SHORT"}] | ${getTimeElapsed(row.ts, Date.now())} ago | Mark Price: ${row.price} | Verdict: ${row.supported ? "Supported" : "Rejected"} (Confidence: ${row.confidence})`;
-                }
+            // if (BroadcastEngine.#aiHistory[ticker].length > 0) {
+            //     prompt[1].content += `\n\nPrevious Signals: `;
+            //     // prompt[1].content += `\nEach includes the trade type, time since generation, mark price, and your verdict at the time.`;
+            //     for (let i = 0; i < BroadcastEngine.#aiHistory[ticker].length; i++) {
+            //         const row = BroadcastEngine.#aiHistory[ticker][i];
+            //         prompt[1].content += `\n- ${row.long ? "LONG" : "SHORT"} | ${getTimeElapsed(row.ts, Date.now())} ago | Mark Price: ${row.price} | Verdict: ${row.supported ? "Supported" : "Rejected"} (Confidence: ${row.confidence})`;
+            //     }
+            // }
+
+            const history = BroadcastEngine.#aiHistory[ticker];
+            if (history.length > 0) {
+                prompt[1].content += `\n\nPrevious Signals:\n` +
+                    history.map(row =>
+                        `- ${row.long ? "LONG" : "SHORT"} | ${getTimeElapsed(row.ts, Date.now())} ago | ${row.price} | ${row.supported ? "✓" : "✗"} ${row.confidence}%`
+                    ).join("\n");
             }
 
-            prompt[1].content += `\n\n## INDICATOR ANALYSIS`;
+            // prompt[1].content += `\n\n## INDICATOR ANALYSIS`;
             for (let i = 1; i <= 7; i++) {
                 const data = rawPrompt[i];
                 switch (i) {
                     case 1:
-                        prompt[1].content += `\n\n1. Entry:  \n`;
+                        prompt[1].content += `\n\nEntry: `;
                         // prompt[1].content += `\nTrend/momentum switch detection using a single indicator.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
+                        prompt[1].content += `${data.length ? data.map(x => `${x}`).join("") : 'None'}`;
                         break;
                     case 2:
-                        prompt[1].content += `\n\n2. Trend:  \n`;
+                        prompt[1].content += `\n\nTrend: `;
                         // prompt[1].content += `\nDetermined using multiple trend indicators.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
+                        prompt[1].content += `${data.length ? '\n' + data.map(x => `- ${x}`).join("\n") : 'None'}`;
                         break;
                     case 3:
-                        prompt[1].content += `\n\n3. Strength:  \n`;
+                        prompt[1].content += `\n\nStrength: `;
                         // prompt[1].content += `\nMeasured by ADX. Strong if ADX >= 25.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
+                        prompt[1].content += `${data.length ? data.map(x => `${x}`).join("") : 'None'}`;
                         break;
                     case 4:
-                        prompt[1].content += `\n\n4. Over${signal.long ? 'bought' : 'sold'}:  \n`;
+                        prompt[1].content += `\n\nOver${signal.long ? 'bought' : 'sold'}: `;
                         // prompt[1].content += `\nChecks if market conditions could reverse the signal.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : `\tNone detected`}`;
+                        prompt[1].content += `${data.length ? '\n' + data.map(x => `- ${x}`).join("\n") : `None`}`;
                         break;
                     case 5:
                         // prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
-                        prompt[1].content += `\n\n5. Candlestick Reversals:  \n`;
+                        prompt[1].content += `\n\nReversal Candles: `;
                         // prompt[1].content += `\nDetects candlestick patterns opposing the signal.\n`;
-                        prompt[1].content += `${data.length ? `${data.map(x => `\t- ${x}`).join("\n")}.` : '\tNone detected'}`;
+                        prompt[1].content += `${data.length ? `${data.map(x => `${x}`).join(",")}` : 'None'}`;
                         break;
                     case 6:
-                        prompt[1].content += `\n\n6. Stop Loss Price:  \n`;
+                        prompt[1].content += `\n\nStop Loss Price:  \n`;
                         // prompt[1].content += `\nStop loss price calculated using a volatility or trend-based indicator.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone computed'}`;
+                        prompt[1].content += `${data.length ? data.map(x => `- ${x}`).join("\n") : 'None'}`;
                         break;
                     case 7:
-                        prompt[1].content += `\n\n7. Volatility:  \n`;
+                        prompt[1].content += `\n\nVolatility: `;
                         // prompt[1].content += `\nComputed using ATR and expressed as a percentage of current price.\n`;
-                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone computed'}`;
+                        prompt[1].content += `${data.length ? data.map(x => `${x}`).join("") : 'None'}`;
                         break;
                     default:
                     // do nothing
                 }
             }
 
-            prompt[1].content += `\n\n## SIGNAL\nThe trading script now proposes a **${signal.long ? "LONG" : "SHORT"}** signal. ${occurence > 1 ? `The same signal has occurred ${occurence} times consecutively.` : ''}`;
+            prompt[1].content += `\n\nSignal: **${signal.long ? "LONG" : "SHORT"}** ${occurence > 1 ? `(Occurred ${occurence}x consecutively)` : ''}`;
 
             prompt[1].content += `\n\n## TASK\nReturn a JSON object only with:\n- supported: true/false\n- reason: short paragraph\n- confidence: 0–100`;
 

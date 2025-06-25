@@ -40,6 +40,7 @@ const calculateUtf8FileSize = require("../lib/file_size");
 const getDateTime = require("../lib/get_date_time");
 const formatNumber = require("../lib/format_number");
 const getTimeElapsed = require("../lib/get_time_elapsed");
+const getDateTime2 = require("../lib/get_date_time_2");
 
 let TelegramEngine = null;
 
@@ -222,9 +223,9 @@ class Analysis {
                  */
                 let userPrompt = [
                     [
-                        `- Ticker: ${symbol}`,
-                        `- Data: ${formatNumber(data.length)} rows, ${Site.TK_GRANULARITY} each (${getDateTime(Date.now() - (Site.TK_INTERVAL * data.length))} → ${getDateTime(Date.now())}, total ${getTimeElapsed((Date.now() - (Site.TK_INTERVAL * data.length)), Date.now())})`,
-                        `- Current Price: ${latestRate}`,
+                        `Ticker: ${symbol}`,
+                        `Data: ${data.length}x${Site.TK_GRANULARITY} (${getDateTime2(Date.now() - (Site.TK_INTERVAL * data.length))} → ${getDateTime2(Date.now())})`,
+                        `Price: ${latestRate}`,
                     ], // INPUT DATA
                     [], // STEP 1
                     [], // STEP 2
@@ -322,7 +323,7 @@ class Analysis {
                             cache.PSR_BEAR = psarBear;
                             cache.PSR_SL = sl;
                         }
-                        if (cache.PSR_BULL || cache.PSR_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `PSAR: ${cache.PSR_SL}`: ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
+                        if (cache.PSR_BULL || cache.PSR_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.PSR_SL} (PSAR)`: ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
                     },
                     MCD: () => {
                         if (!cache.MCD) {
@@ -382,7 +383,7 @@ class Analysis {
                             cache.ICH_BEAR = bear;
                             cache.ICH_SL = sl;
                         }
-                        if (cache.ICH_BULL || cache.ICH_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `ICH: ${cache.ICH_SL}` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ?`${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}` : ''}`);
+                        if (cache.ICH_BULL || cache.ICH_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.ICH_SL} (ICH)` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ?`${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}` : ''}`);
                     },
                     BLL: () => {
                         if (cache.BLL_BULL === null) {
@@ -467,7 +468,7 @@ class Analysis {
                             const adx = ADX.calculate({ close, high, low, period: Site.IN_CFG.ADX_P ?? 14 });
                             cache.STRONG = ((adx[adx.length - 1] || {}).adx || 0) >= 25;
                         }
-                        userPrompt[currentStep].push(`ADX: ${cache.STRONG ? 'Strong' : 'Not Strong'} ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}`);
+                        userPrompt[currentStep].push(`ADX = ${cache.STRONG ? 'Strong' : 'Not Strong'} ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}`);
                     },
                     STC: () => {
                         if (cache.STC_OB === null) {
@@ -652,7 +653,7 @@ class Analysis {
                             const perc = ((atr[atr.length - 1] || 0) / latestRate) * 100;
                             cache.ATR = perc;
                         }
-                        userPrompt[currentStep].push([`ATR: ${(cache.ATR || 0).toFixed(2)}% of price ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}`]);
+                        userPrompt[currentStep].push([`ATR = ${(cache.ATR || 0).toFixed(2)}% of price ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}`]);
                     },
                 };
 
@@ -785,7 +786,7 @@ class Analysis {
                 cache.ENTRY = step1();
                 const flip = (cache.ENTRY === true) ? "Bullish flip" : (cache.ENTRY === false) ? "Bearish flip" : "";
                 const sig = (cache.ENTRY === true) ? "Long" : (cache.ENTRY === false) ? "Short" : "";
-                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")}: ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
+                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")} = ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
                 currentStep = 0;
                 if (cache.ENTRY === true || cache.ENTRY === false) {
                     // Entry detected.
