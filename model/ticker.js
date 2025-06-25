@@ -35,6 +35,12 @@ class Ticker {
      */
     last_fetched;
 
+    getMarkPrice(){
+        const data = (this.candlestickData || []);
+        const row = (data[data.length - 1] || {});
+        return row.close || 0;
+    }
+
     /**
      * Keeps the ticker alive
      */

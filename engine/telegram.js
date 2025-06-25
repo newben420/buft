@@ -210,6 +210,10 @@ class TelegramEngine {
                     callback_data: `short_${ticker.symbol}_del`,
                 });
             }
+            arr.push({
+                text: `💰`,
+                callback_data: `price_${ticker.symbol}`,
+            });
             inline.push(arr);
         }
         return { message: inline.length ? message : `❌ No tickers available`, inline };
@@ -571,6 +575,25 @@ class TelegramEngine {
                                         text: `❌ Could not short ${symbol}`,
                                     });
                                 }
+                            } catch (error) {
+                                Log.dev(error);
+                            }
+                        }
+                        else if (content.startsWith("price ")) {
+                            let temp1 = content.split(" ");
+                            let symbol = temp1[1];
+                            try {
+                                const ticker = TickerEngine.getTicker(symbol);
+                                let m = ``;
+                                if(ticker){
+                                    m = `✅ ${symbol} ${FFF(ticker.getMarkPrice(), 6)}`;
+                                }
+                                else{
+                                    m = `❌ ${symbol} has no added ticker`;
+                                }
+                                TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
+                                    text: m,
+                                });
                             } catch (error) {
                                 Log.dev(error);
                             }

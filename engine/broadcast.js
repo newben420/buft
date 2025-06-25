@@ -112,6 +112,10 @@ class BroadcastEngine {
             {
                 text: `Create Order`,
                 callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
+            },
+            {
+                text: `Mark Price`,
+                callback_data: `price_${ticker}`,
             }
         ]];
 
