@@ -189,7 +189,10 @@ class Analysis {
      * @param {string} i 
      * @returns {string}
      */
-    static #getParamsForInd = (i) => Object.keys(Site.IN_CFG).filter(x => x.startsWith(i)).map(x => `${x.replace(i, "")}: ${Site.IN_CFG[x]}`).join(", ");
+    static #getParamsForInd = (i) => {
+        const p = Object.keys(Site.IN_CFG).filter(x => x.startsWith(i));
+        return p.length ? `(${p.map(x => `${Site.IN_CFG[x]}`).join("/")})` : '(default params)';
+    };
 
     /**
      * Runs analysis on candlestic kdata
@@ -220,9 +223,7 @@ class Analysis {
                 let userPrompt = [
                     [
                         `- Ticker: ${symbol}`,
-                        `- Rows of data: ${formatNumber(data.length)}`,
-                        `- Granularity: ${Site.TK_GRANULARITY} per row`,
-                        `- Data timeframe: ${getDateTime(Date.now() - (Site.TK_INTERVAL * data.length))} to ${getDateTime(Date.now())} (${getTimeElapsed((Date.now() - (Site.TK_INTERVAL * data.length)), Date.now())})`,
+                        `- Data: ${formatNumber(data.length)} rows, ${Site.TK_GRANULARITY} each (${getDateTime(Date.now() - (Site.TK_INTERVAL * data.length))} → ${getDateTime(Date.now())}, total ${getTimeElapsed((Date.now() - (Site.TK_INTERVAL * data.length)), Date.now())})`,
                         `- Current Price: ${latestRate}`,
                     ], // INPUT DATA
                     [], // STEP 1
@@ -321,8 +322,7 @@ class Analysis {
                             cache.PSR_BEAR = psarBear;
                             cache.PSR_SL = sl;
                         }
-                        if(currentStep == 6) userPrompt[currentStep].push([`PSAR: ${cache.PSR_SL}.`]);
-                        userPrompt[currentStep].push(`PSAR PARAMS: ${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}.`);
+                        if (cache.PSR_BULL || cache.PSR_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `PSAR: ${cache.PSR_SL}`: ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
                     },
                     MCD: () => {
                         if (!cache.MCD) {
@@ -333,8 +333,7 @@ class Analysis {
                             cache.MCD_BULL = macdBull;
                             cache.MCD_BEAR = macdBear;
                         }
-                        if(currentStep == 2) userPrompt[currentStep].push(`MACD: ${cache.MCD_BULL ? 'Bullish' : cache.MCD_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`MACD PARAMS: ${Analysis.#getParamsForInd('MCD_').replace("FSP", "fast period").replace("SLP", "slow period").replace("SGP", "signal period") || "default"}.`);
+                        if (cache.MCD_BULL || cache.MCD_BEAR) userPrompt[currentStep].push(`${currentStep == 2 ? `MACD: ${cache.MCD_BULL ? 'Bullish' : cache.MCD_BEAR ? 'Bearish' : 'No Trend'}` : ''} ${(currentStep == 1 || (currentStep == 2 && (!Site.STR_TREND_IND.includes(Site.STR_ENTRY_IND)))) ? `${Analysis.#getParamsForInd('MCD_').replace("FSP", "fast period").replace("SLP", "slow period").replace("SGP", "signal period") || "default"}` : ''}`);
                     },
                     SRS: () => {
                         if (cache.SRS_OB === null) {
@@ -356,8 +355,7 @@ class Analysis {
                             cache.SRS_BULL = !OS;
                             cache.SRS_BEAR = !OB;
                         }
-                        userPrompt[currentStep].push(`STOCH RSI: ${(cache.ENTRY === true && cache.SRS_OB && 'Overbought') || (cache.ENTRY === false && cache.SRS_OS && 'Oversold') || 'No detection'}.`);
-                        userPrompt[currentStep].push(`STOCH RSI PARAMS: ${(Analysis.#getParamsForInd('STC_').replace("SP", "stoch signal period").replace("P", "stoch period") + ', ' + Analysis.#getParamsForInd('RSI_').replace("P", "rsi period")) || "default"}.`);
+                        if ((cache.ENTRY === true && cache.SRS_OB) || (cache.ENTRY === false && cache.SRS_OS)) userPrompt[currentStep].push(`STOCH RSI ${(Analysis.#getParamsForInd('STC_').replace("SP", "stoch signal period").replace("P", "stoch period").replace(")", "") + '/' + Analysis.#getParamsForInd('RSI_').replace("P", "rsi period").replace("(", "")) || "default"}`);
                     },
                     ICH: () => {
                         if (!cache.ICH) {
@@ -384,15 +382,14 @@ class Analysis {
                             cache.ICH_BEAR = bear;
                             cache.ICH_SL = sl;
                         }
-                        if(currentStep == 6) userPrompt[currentStep].push(`ICHIMOKU CLOUD: ${cache.ICH_SL}.`);
-                        userPrompt[currentStep].push(`ICHIMOKU CLOUD PARAMS: ${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}.`);
+                        if (cache.ICH_BULL || cache.ICH_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `ICH: ${cache.ICH_SL}` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ?`${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}` : ''}`);
                     },
                     BLL: () => {
                         if (cache.BLL_BULL === null) {
                             cache.BLL_BULL = bullish(csd);
                             cache.BLL_BEAR = bearish(csd);
                         }
-                        userPrompt[currentStep].push(`CANDLESTICKS: ${cache.BLL_BULL ? 'Bullish' : cache.BLL_BEAR ? 'Bearish' : 'No Trend'}.`);
+                        if (cache.BLL_BULL || cache.BLL_BEAR) userPrompt[currentStep].push(`CANDLE: ${cache.BLL_BULL ? 'Bullish' : cache.BLL_BEAR ? 'Bearish' : 'No Trend'}`);
                     },
                     SMA: () => {
                         if (cache.SMA_BULL === null) {
@@ -400,8 +397,7 @@ class Analysis {
                             cache.SMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
                             cache.SMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        userPrompt[currentStep].push(`SMA: ${cache.SMA_BULL ? 'Bullish' : cache.SMA_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`SMA PARAMS: ${Analysis.#getParamsForInd('MAP') ? `period${Analysis.#getParamsForInd('MAP')}` : "default"}.`);
+                        if (cache.SMA_BULL || cache.SMA_BEAR) userPrompt[currentStep].push(`SMA: ${cache.SMA_BULL ? 'Bullish' : cache.SMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
                     KST: () => {
                         if (cache.KST_BULL === null) {
@@ -424,8 +420,7 @@ class Analysis {
                             cache.KST_BULL = bull;
                             cache.KST_BEAR = bear;
                         }
-                        userPrompt[currentStep].push(`KST: ${cache.KST_BULL ? 'Bullish' : cache.KST_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`KST PARAMS: ${Analysis.#getParamsForInd('KST_').replace(/RP/g, "ROC period ").replace(/SG/, "signal period ").replace(/SP/g, "SMA ROC period ") || "default"}.`);
+                        if (cache.KST_BULL || cache.KST_BEAR) userPrompt[currentStep].push(`KST: ${cache.KST_BULL ? 'Bullish' : cache.KST_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('KST_').replace(/RP/g, "ROC period ").replace(/SG/, "signal period ").replace(/SP/g, "SMA ROC period ") || "default"}`);
                     },
                     EMA: () => {
                         if (cache.EMA_BULL === null) {
@@ -433,8 +428,7 @@ class Analysis {
                             cache.EMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
                             cache.EMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        userPrompt[currentStep].push(`EMA: ${cache.EMA_BULL ? 'Bullish' : cache.EMA_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`EMA PARAMS: ${Analysis.#getParamsForInd('MAP') ? `period${Analysis.#getParamsForInd('MAP')}` : "default"}.`);
+                        if (cache.EMA_BULL || cache.EMA_BEAR) userPrompt[currentStep].push(`EMA: ${cache.EMA_BULL ? 'Bullish' : cache.EMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
                     WMA: () => {
                         if (cache.WMA_BULL === null) {
@@ -442,8 +436,7 @@ class Analysis {
                             cache.WMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
                             cache.WMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        userPrompt[currentStep].push(`WMA: ${cache.WMA_BULL ? 'Bullish' : cache.WMA_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`WMA PARAMS: ${Analysis.#getParamsForInd('MAP') ? `period${Analysis.#getParamsForInd('MAP')}` : "default"}.`);
+                        if (cache.WMA_BULL || cache.WMA_BEAR) userPrompt[currentStep].push(`WMA: ${cache.WMA_BULL ? 'Bullish' : cache.WMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
                     VWP: () => {
                         if (cache.VWP_BULL === null) {
@@ -451,7 +444,7 @@ class Analysis {
                             cache.VWP_BULL = latestRate > (vwap[vwap.length - 1] || Infinity);
                             cache.VWP_BEAR = latestRate < (vwap[vwap.length - 1] || 0);
                         }
-                        userPrompt[currentStep].push(`VWAP: ${cache.VWP_BULL ? 'Bullish' : cache.VWP_BEAR ? 'Bearish' : 'No Trend'}.`);
+                        if (cache.VWP_BULL || cache.VWP_BEAR) userPrompt[currentStep].push(`VWAP: ${cache.VWP_BULL ? 'Bullish' : cache.VWP_BEAR ? 'Bearish' : 'No Trend'}`);
                     },
                     AOS: () => {
                         if (cache.AOS_BULL === null) {
@@ -459,8 +452,7 @@ class Analysis {
                             cache.AOS_BULL = (ao[ao.length - 1] || 0) > 0;
                             cache.AOS_BEAR = (ao[ao.length - 1] || 0) < 0;
                         }
-                        userPrompt[currentStep].push(`AWESOME OSCILLATOR: ${cache.AOS_BULL ? 'Bullish' : cache.AOS_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`AWESOME OSCILLATOR PARAMS: ${Analysis.#getParamsForInd('AOS_').replace("FSP", "fast period").replace("SLP", "slow period") || "default"}.`);
+                        if (cache.AOS_BULL || cache.AOS_BEAR) userPrompt[currentStep].push(`AO: ${cache.AOS_BULL ? 'Bullish' : cache.AOS_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('AOS_').replace("FSP", "fast period").replace("SLP", "slow period") || "default"}`);
                     },
                     TRX: () => {
                         if (cache.TRX_BULL === null) {
@@ -468,16 +460,14 @@ class Analysis {
                             cache.TRX_BULL = (trix[trix.length - 1] || 0) > 0;
                             cache.TRX_BEAR = (trix[trix.length - 1] || 0) < 0;
                         }
-                        userPrompt[currentStep].push(`TRIX: ${cache.TRX_BULL ? 'Bullish' : cache.TRX_BEAR ? 'Bearish' : 'No Trend'}.`);
-                        userPrompt[currentStep].push(`TRIX PARAMS: ${Analysis.#getParamsForInd('TRX_').replace("P", "period") || "default"}.`);
+                        if (cache.TRX_BULL || cache.TRX_BEAR) userPrompt[currentStep].push(`TRIX: ${cache.TRX_BULL ? 'Bullish' : cache.TRX_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('TRX_').replace("P", "period") || "default"}`);
                     },
                     ADX: () => {
                         if (cache.STRONG === null) {
                             const adx = ADX.calculate({ close, high, low, period: Site.IN_CFG.ADX_P ?? 14 });
                             cache.STRONG = ((adx[adx.length - 1] || {}).adx || 0) >= 25;
                         }
-                        userPrompt[currentStep].push(`ADX: ${cache.STRONG ? 'Strong Trend' : 'Not Strong Trend'}.`);
-                        userPrompt[currentStep].push(`ADX PARAMS: ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}.`);
+                        userPrompt[currentStep].push(`ADX: ${cache.STRONG ? 'Strong' : 'Not Strong'} ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}`);
                     },
                     STC: () => {
                         if (cache.STC_OB === null) {
@@ -485,8 +475,7 @@ class Analysis {
                             cache.STC_OB = ((stoch[stoch.length - 1] || {}).k || 0) > 80;
                             cache.STC_OS = ((stoch[stoch.length - 1] || {}).k || Infinity) < 20;
                         }
-                        userPrompt[currentStep].push(`STOCH: ${(cache.ENTRY === true && cache.STC_OB && 'Overbought') || (cache.ENTRY === false && cache.STC_OS && 'Oversold') || 'No detection'}.`);
-                        userPrompt[currentStep].push(`STOCH PARAMS: ${Analysis.#getParamsForInd('STC_').replace("P", "period").replace("SP", "signal period") || "default"}.`);
+                        if ((cache.ENTRY === true && cache.STC_OB) || (cache.ENTRY === false && cache.STC_OS)) userPrompt[currentStep].push(`STOCH ${Analysis.#getParamsForInd('STC_').replace("P", "period").replace("SP", "signal period") || "default"}`);
                     },
                     RSI: () => {
                         if (cache.RSI_OB === null) {
@@ -494,8 +483,7 @@ class Analysis {
                             cache.RSI_OB = (rsi[rsi.length - 1] || 0) > 70;
                             cache.RSI_OS = (rsi[rsi.length - 1] || Infinity) < 30;
                         }
-                        userPrompt[currentStep].push(`RSI: ${(cache.ENTRY === true && cache.RSI_OB && 'Overbought') || (cache.ENTRY === false && cache.RSI_OS && 'Oversold') || 'No detection'}.`);
-                        userPrompt[currentStep].push(`RSI PARAMS: ${Analysis.#getParamsForInd('RSI_').replace("P", "period") || "default"}.`);
+                        if ((cache.ENTRY === true && cache.RSI_OB) || (cache.ENTRY === false && cache.RSI_OS)) userPrompt[currentStep].push(`RSI ${Analysis.#getParamsForInd('RSI_').replace("P", "period") || "default"}`);
                     },
                     CCI: () => {
                         if (cache.CCI_OB === null) {
@@ -503,8 +491,7 @@ class Analysis {
                             cache.CCI_OB = (cci[cci.length - 1] || 0) > 100;
                             cache.CCI_OB = (cci[cci.length - 1] || Infinity) < -100;
                         }
-                        userPrompt[currentStep].push(`CCI: ${(cache.ENTRY === true && cache.CCI_OB && 'Overbought') || (cache.ENTRY === false && cache.CCI_OS && 'Oversold') || 'No detection'}.`);
-                        userPrompt[currentStep].push(`CCI PARAMS: ${Analysis.#getParamsForInd('CCI_').replace("P", "period") || "default"}.`);
+                        if ((cache.ENTRY === true && cache.CCI_OB) || (cache.ENTRY === false && cache.CCI_OS)) userPrompt[currentStep].push(`CCI ${Analysis.#getParamsForInd('CCI_').replace("P", "period") || "default"}`);
                     },
                     MFI: () => {
                         if (cache.MFI_OB === null) {
@@ -512,142 +499,141 @@ class Analysis {
                             cache.MFI_OB = (mfi[mfi.length - 1] || 0) > 80;
                             cache.MFI_OS = (mfi[mfi.length - 1] || Infinity) < 20;
                         }
-                        userPrompt[currentStep].push(`MFI: ${(cache.ENTRY === true && cache.MFI_OB && 'Overbought') || (cache.ENTRY === false && cache.MFI_OS && 'Oversold') || 'No detection'}.`);
-                        userPrompt[currentStep].push(`MFI PARAMS: ${Analysis.#getParamsForInd('MFI_').replace("P", "period") || "default"}.`);
+                        if ((cache.ENTRY === true && cache.MFI_OB)|| (cache.ENTRY === false && cache.MFI_OS)) userPrompt[currentStep].push(`MFI ${Analysis.#getParamsForInd('MFI_').replace("P", "period") || "default"}`);
                     },
                     STR: () => {
                         if (cache.STR === null) {
                             cache.STR = shootingstar(csd);
                         }
-                        if((cache.ENTRY === true) && cache.STR) userPrompt[currentStep].push(`Shooting Star`);
+                        if ((cache.ENTRY === true) && cache.STR) userPrompt[currentStep].push(`Shooting Star`);
                     },
                     HGM: () => {
                         if (cache.HGM === null) {
                             cache.HGM = hangingman(csd);
                         }
-                        if((cache.ENTRY === true) && cache.HGM) userPrompt[currentStep].push(`Hanging Man`);
+                        if ((cache.ENTRY === true) && cache.HGM) userPrompt[currentStep].push(`Hanging Man`);
 
                     },
                     EST: () => {
                         if (cache.EST === null) {
                             cache.EST = eveningstar(csd);
                         }
-                        if((cache.ENTRY === true) && cache.EST) userPrompt[currentStep].push(`Evening Star`);
+                        if ((cache.ENTRY === true) && cache.EST) userPrompt[currentStep].push(`Evening Star`);
                     },
                     TBC: () => {
                         if (cache.TBC === null) {
                             cache.TBC = threeblackcrows(csd);
                         }
-                        if((cache.ENTRY === true) && cache.TBC) userPrompt[currentStep].push(`Three Black Crows`);
-                        
+                        if ((cache.ENTRY === true) && cache.TBC) userPrompt[currentStep].push(`Three Black Crows`);
+
                     },
                     PIL: () => {
                         if (cache.PIL === null) {
                             cache.PIL = piercingline(csd);
                         }
-                        if((cache.ENTRY === true) && cache.PIL) userPrompt[currentStep].push(`Piercing Line`);
+                        if ((cache.ENTRY === true) && cache.PIL) userPrompt[currentStep].push(`Piercing Line`);
                     },
                     DCC: () => {
                         if (cache.DCC === null) {
                             cache.DCC = darkcloudcover(csd);
                         }
-                        if((cache.ENTRY === true) && cache.DCC) userPrompt[currentStep].push(`Dark Cloud Cover`);
+                        if ((cache.ENTRY === true) && cache.DCC) userPrompt[currentStep].push(`Dark Cloud Cover`);
                     },
                     TTP: () => {
                         if (cache.TTP === null) {
                             cache.TTP = tweezertop(csd);
                         }
-                        if((cache.ENTRY === true) && cache.TTP) userPrompt[currentStep].push(`Tweezer Top`);
+                        if ((cache.ENTRY === true) && cache.TTP) userPrompt[currentStep].push(`Tweezer Top`);
                     },
                     TWS: () => {
                         if (cache.TWS === null) {
                             cache.TWS = threewhitesoldiers(csd);
                         }
-                        if((cache.ENTRY === false) && cache.TWS) userPrompt[currentStep].push(`Three White Soldiers`);
+                        if ((cache.ENTRY === false) && cache.TWS) userPrompt[currentStep].push(`Three White Soldiers`);
                     },
                     MST: () => {
                         if (cache.MST === null) {
                             cache.MST = morningstar(csd);
                         }
-                        if((cache.ENTRY === false) && cache.MST) userPrompt[currentStep].push(`Morning Star`);
+                        if ((cache.ENTRY === false) && cache.MST) userPrompt[currentStep].push(`Morning Star`);
                     },
                     HMR: () => {
                         if (cache.HMR === null) {
                             cache.HMR = hammerpattern(csd);
                         }
-                        if((cache.ENTRY === false) && cache.HMR) userPrompt[currentStep].push(`Hammer Pattern`);
+                        if ((cache.ENTRY === false) && cache.HMR) userPrompt[currentStep].push(`Hammer Pattern`);
                     },
                     TBT: () => {
                         if (cache.TBT === null) {
                             cache.TBT = tweezerbottom(csd);
                         }
-                        if((cache.ENTRY === false) && cache.TBT) userPrompt[currentStep].push(`Tweezer Bottom`);
+                        if ((cache.ENTRY === false) && cache.TBT) userPrompt[currentStep].push(`Tweezer Bottom`);
                     },
                     ABB: () => {
                         if (cache.ABB === null) {
                             cache.ABB = abandonedbaby(csd);
                         }
-                        if(cache.ABB) userPrompt[currentStep].push(`Abandoned Baby`);
+                        if (cache.ABB) userPrompt[currentStep].push(`Abandoned Baby`);
                     },
                     BLE: () => {
                         if (cache.BLE === null) {
                             cache.BLE = bullishengulfingpattern(csd);
                         }
-                        if((cache.ENTRY === false) && cache.BLE) userPrompt[currentStep].push(`Bullish Engulfing Pattern`);
+                        if ((cache.ENTRY === false) && cache.BLE) userPrompt[currentStep].push(`Bullish Engulfing Pattern`);
                     },
                     MDS: () => {
                         if (cache.MDS === null) {
                             cache.MDS = morningdojistar(csd);
                         }
-                        if((cache.ENTRY === false) && cache.MDS) userPrompt[currentStep].push(`Morning Doji Star`);
+                        if ((cache.ENTRY === false) && cache.MDS) userPrompt[currentStep].push(`Morning Doji Star`);
                     },
                     DFD: () => {
                         if (cache.DFD === null) {
                             cache.DFD = dragonflydoji(csd);
                         }
-                        if((cache.ENTRY === false) && cache.DFD) userPrompt[currentStep].push(`Dragon Fly Doji`);
+                        if ((cache.ENTRY === false) && cache.DFD) userPrompt[currentStep].push(`Dragon Fly Doji`);
                     },
                     BLH: () => {
                         if (cache.BLH === null) {
                             cache.BLH = bullishharami(csd);
                         }
-                        if((cache.ENTRY === false) && cache.BLH) userPrompt[currentStep].push(`Bullish Harami`);
+                        if ((cache.ENTRY === false) && cache.BLH) userPrompt[currentStep].push(`Bullish Harami`);
                     },
                     BLM: () => {
                         if (cache.BLM === null) {
                             cache.BLM = bullishmarubozu(csd);
                         }
-                        if((cache.ENTRY === false) && cache.BLM) userPrompt[currentStep].push(`Bullish Marubozu`);
+                        if ((cache.ENTRY === false) && cache.BLM) userPrompt[currentStep].push(`Bullish Marubozu`);
                     },
                     BLC: () => {
                         if (cache.BLC === null) {
                             cache.BLC = bullishharamicross(csd);
                         }
-                        if((cache.ENTRY === false) && cache.BLC) userPrompt[currentStep].push(`Bullish Harami Cross`);
+                        if ((cache.ENTRY === false) && cache.BLC) userPrompt[currentStep].push(`Bullish Harami Cross`);
                     },
                     BEP: () => {
                         if (cache.BEP === null) {
                             cache.BEP = bearishengulfingpattern(csd);
                         }
-                        if((cache.ENTRY === true) && cache.BEP) userPrompt[currentStep].push(`Bearish Engulfing Pattern`);
+                        if ((cache.ENTRY === true) && cache.BEP) userPrompt[currentStep].push(`Bearish Engulfing Pattern`);
                     },
                     EDS: () => {
                         if (cache.EDS === null) {
                             cache.EDS = eveningdojistar(csd);
                         }
-                        if((cache.ENTRY === true) && cache.EDS) userPrompt[currentStep].push(`Evening Doji Star`);
+                        if ((cache.ENTRY === true) && cache.EDS) userPrompt[currentStep].push(`Evening Doji Star`);
                     },
                     GSD: () => {
                         if (cache.GSD === null) {
                             cache.GSD = gravestonedoji(csd);
                         }
-                        if((cache.ENTRY === true) && cache.GSD) userPrompt[currentStep].push(`Gravestone Doji`);
+                        if ((cache.ENTRY === true) && cache.GSD) userPrompt[currentStep].push(`Gravestone Doji`);
                     },
                     BRH: () => {
                         if (cache.BRH === null) {
                             cache.BRH = bearishharami(csd);
                         }
-                        if((cache.ENTRY === true) && cache.BRH) userPrompt[currentStep].push(`Bearish Harami`);
+                        if ((cache.ENTRY === true) && cache.BRH) userPrompt[currentStep].push(`Bearish Harami`);
                     },
                     BRM: () => {
                         if (cache.BRM === null) {
@@ -658,7 +644,7 @@ class Analysis {
                         if (cache.BHC === null) {
                             cache.BHC = bearishharamicross(csd);
                         }
-                        if((cache.ENTRY === true) && cache.BHC) userPrompt[currentStep].push(`Bearish Harami Cross`);
+                        if ((cache.ENTRY === true) && cache.BHC) userPrompt[currentStep].push(`Bearish Harami Cross`);
                     },
                     ATR: () => {
                         if (cache.ATR === null) {
@@ -666,8 +652,7 @@ class Analysis {
                             const perc = ((atr[atr.length - 1] || 0) / latestRate) * 100;
                             cache.ATR = perc;
                         }
-                        userPrompt[currentStep].push([`ATR: ${(cache.ATR || 0).toFixed(2)}%.`]);
-                        userPrompt[currentStep].push([`ATR PARAMS: ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}.`]);
+                        userPrompt[currentStep].push([`ATR: ${(cache.ATR || 0).toFixed(2)}% of price ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}`]);
                     },
                 };
 
@@ -800,21 +785,21 @@ class Analysis {
                 cache.ENTRY = step1();
                 const flip = (cache.ENTRY === true) ? "Bullish flip" : (cache.ENTRY === false) ? "Bearish flip" : "";
                 const sig = (cache.ENTRY === true) ? "Long" : (cache.ENTRY === false) ? "Short" : "";
-                userPrompt[currentStep].unshift(`${Site.STR_ENTRY_IND}: ${flip}. Signal: ${sig}.`);
+                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")}: ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
                 currentStep = 0;
                 if (cache.ENTRY === true || cache.ENTRY === false) {
                     // Entry detected.
                     Log.flow(`Analysis > ${symbol} > Entry detected. Confirming ${cache.ENTRY ? 'bull' : 'bear'} trend...`, 6);
-                    if ((Site.STR_TREND_FV && step2()) || (!Site.STR_TREND_FV)) {
+                    if ((step2() && Site.STR_TREND_FV) || (!Site.STR_TREND_FV)) {
                         // Trend confirmed.
                         Log.flow(`Analysis > ${symbol} > Trend confirmed. Checking trend strength...`, 6);
-                        if ((Site.STR_STG_FV && step3()) || (!Site.STR_STG_FV)) {
+                        if ((step3() && Site.STR_STG_FV) || (!Site.STR_STG_FV)) {
                             // Trend strength confirmed.
                             Log.flow(`Analysis > ${symbol} > Strength is acceptable. Checking if over${cache.ENTRY ? 'bought' : 'sold'}...`, 6);
-                            if ((Site.STR_OB_FV && (!step4())) || (!Site.STR_OB_FV)) {
+                            if (((!step4()) && Site.STR_OB_FV) || (!Site.STR_OB_FV)) {
                                 // No presence of effecting overbought confirmed.
                                 Log.flow(`Analysis > ${symbol} > Overbought condition acceptable. Checking for reversals...`, 6);
-                                if ((Site.STR_REV_FV && (!step5())) || (!Site.STR_REV_FV)) {
+                                if (((!step5()) && Site.STR_REV_FV) || (!Site.STR_REV_FV)) {
                                     Log.flow(`Analysis > ${symbol} > Reversal conditions acceptable. Checking volatility...`, 6);
                                     // No reversl detected.
                                     if (step7()) {

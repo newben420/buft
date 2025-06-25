@@ -18,7 +18,7 @@ const useCache = arg.indexOf("nc") < 0;
 Site.PRODUCTION = true;
 Site.FLOW_LOG_MAX_PRIORITY = 1;
 Site.IN_CFG.ML_COL_DATA = true;
-Site.BROADCAST = false;
+Site.BROADCAST = true;
 
 const tc = str => str.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
 

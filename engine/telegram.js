@@ -134,10 +134,10 @@ class TelegramEngine {
                  * @type {number}
                  */
                 let slROE = Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))) * -1;
-                if(order.manual){
+                if (order.manual) {
                     tpROE = Site.TR_MANUAL_STOPLOSS_PERC;
                 }
-                else{
+                else {
                     tpROE = ((order.sl * order.leverage) * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER);
                 }
                 m += `Break Even ROE 💰 ${breakEvenROE.toFixed(2)}%\n`;
@@ -149,7 +149,7 @@ class TelegramEngine {
                 m += `Open Price 💰 ${order.open_price}\n`;
                 m += `Break Even Price 💰 ${FFF(order.breakeven_price)}\n`;
                 m += `Liquidation Price 💰 ${FFF(order.liquidation_price)}\n`;
-                
+
                 m += `\n`;
                 message += m;
                 inline.push([{
@@ -202,12 +202,12 @@ class TelegramEngine {
                 arr.push(
                     {
                         text: `📈`,
-                        callback_data: `long_${ticker.symbol}`,
+                        callback_data: `long_${ticker.symbol}_del`,
                     }
                 );
                 arr.push({
                     text: `📉`,
-                    callback_data: `short_${ticker.symbol}`,
+                    callback_data: `short_${ticker.symbol}_del`,
                 });
             }
             inline.push(arr);
@@ -386,13 +386,13 @@ class TelegramEngine {
                             }
                         }
                     }
-                    else if(/^([\d]+)(\.[\d]+)?$/.test(content)){
+                    else if (/^([\d]+)(\.[\d]+)?$/.test(content)) {
                         const cap = parseFloat(content) || 0;
-                        if(cap && cap > 0 && cap <= Account.getBalance()){
+                        if (cap && cap > 0 && cap <= Account.getBalance()) {
                             Trader.tempCapital = cap;
                             TelegramEngine.sendMessage(`✅ Temporary capital set to \`${Site.TK_MARGIN_COIN} ${content}\`\n\nIt will be used for the next order`);
                         }
-                        else{
+                        else {
                             TelegramEngine.sendMessage(`❌ Could not set temporary capital to \`${Site.TK_MARGIN_COIN} ${content}\`\n\nValue must be greater than 0 and must be less than or equal to current account balance`);
                         }
                     }
@@ -514,12 +514,21 @@ class TelegramEngine {
                         else if (content.startsWith("long ")) {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
+                            let del = temp1[2] == "del";
                             try {
                                 const signal = new Signal(false, true, "Manual Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                                 const done = await Trader.openOrder(symbol, signal, true);
                                 if (done) {
                                     if (TelegramEngine.#lastTickersMessageID) TelegramEngine.deleteMessage(TelegramEngine.#lastTickersMessageID);
-                                    TelegramEngine.deleteMessage(callbackQuery.message.message_id);
+                                    if (del) {
+                                        TelegramEngine.deleteMessage(callbackQuery.message.message_id);
+                                    }
+                                    else {
+                                        TelegramEngine.#bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+                                            chat_id: Site.TG_CHAT_ID,
+                                            message_id: callbackQuery.message.message_id,
+                                        });
+                                    }
                                     const { message, inline } = TelegramEngine.#getTickersContent();
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                         text: `✅ Longed ${symbol}`,
@@ -537,12 +546,21 @@ class TelegramEngine {
                         else if (content.startsWith("short ")) {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
+                            let del = temp1[2] == "del";
                             try {
                                 const signal = new Signal(true, false, "Manual Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                                 const done = await Trader.openOrder(symbol, signal, true);
                                 if (done) {
                                     if (TelegramEngine.#lastTickersMessageID) TelegramEngine.deleteMessage(TelegramEngine.#lastTickersMessageID);
-                                    TelegramEngine.deleteMessage(callbackQuery.message.message_id);
+                                    if (del) {
+                                        TelegramEngine.deleteMessage(callbackQuery.message.message_id);
+                                    }
+                                    else {
+                                        TelegramEngine.#bot.editMessageReplyMarkup({ inline_keyboard: [] }, {
+                                            chat_id: Site.TG_CHAT_ID,
+                                            message_id: callbackQuery.message.message_id,
+                                        });
+                                    }
                                     const { message, inline } = TelegramEngine.#getTickersContent();
                                     TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                         text: `✅ Shorted ${symbol}`,

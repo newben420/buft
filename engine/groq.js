@@ -195,7 +195,9 @@ class GroqEngine {
             try {
                 const chatCompletion = await GroqEngine.client.chat.completions.create({
                     messages,
-                    model
+                    model,
+                    temperature: 0.3,
+                    max_completion_tokens: 100,
                 });
                 const totalTokens = chatCompletion.usage?.total_tokens || 0;
                 const r = chatCompletion.choices.map(x => x.message.content).join("\n").replace(/[\n]{3,}/g, "\n\n");

@@ -101,7 +101,7 @@ class BroadcastEngine {
         const verdict = await BroadcastEngine.#computePrompt(ticker, signal, rawPrompt, occurence);
 
         if(verdict){
-            m += `\n\n🤖 AI Verdict\n\`\`\`${verdict}\`\`\``;
+            m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict}\`\`\``;
         }
 
         /**
@@ -155,13 +155,13 @@ class BroadcastEngine {
                 },
             ];
 
-            prompt[0].content += `You are ${Site.TITLE || "Bennie"}, a professional and reliable trading assistant with deep understanding of trading indicators and strategies, especially for BitGet USDT Futures.`;
-            prompt[0].content += `\n\nYou will be given structured technical data, analysis steps, and recent signal history. Your task is to reason through them and determine if the current trade signal should be supported.`;
-            prompt[0].content += `\n\nRespond ONLY with a strict JSON object. Do not add any extra text before or after. Use this format:`;
+            prompt[0].content += `You are ${Site.TITLE || "Bennie"} AI,  a trading assistant skilled in indicator-based strategy evaluation for BitGet USDT Futures.`;
+            prompt[0].content += `\n\nGiven structured data and recent signal history, determine if the proposed signal is valid.`;
+            prompt[0].content += `\n\nRespond ONLY with a JSON object like:`;
             prompt[0].content += `\n\n{\n\t"supported": boolean,\n\t"reason": string,\n\t"confidence": number (0 to 100)\n}`;
-            prompt[0].content += `\n\nExample:\n{\n\t"supported": true,\n\t"reason": "The ADX shows strong trend strength and no reversal patterns are detected, supporting the short signal.",\n\t"confidence": 84\n}`;
+            prompt[0].content += `\n\nExample:\n{\n\t"supported": true,\n\t"reason": "ADX confirms strong trend and no reversal signs, supporting the short signal.",\n\t"confidence": 84\n}`;
 
-            prompt[1].content += `#INPUT\n${rawPrompt[0].join("\n")}`;
+            prompt[1].content += `# INPUT\n${rawPrompt[0].join("\n")}`;
 
             if (BroadcastEngine.#aiHistory[ticker].length > 0) {
                 prompt[1].content += `\n\n## PREVIOUS SIGNALS`;
@@ -172,44 +172,45 @@ class BroadcastEngine {
                 }
             }
 
-            prompt[1].content += `\n\n## CURRENT INDICATOR ANALYSIS`;
+            prompt[1].content += `\n\n## INDICATOR ANALYSIS`;
             for (let i = 1; i <= 7; i++) {
                 const data = rawPrompt[i];
                 switch (i) {
                     case 1:
-                        prompt[1].content += `\n\n### STEP 1 - Entry Point`;
-                        prompt[1].content += `\nTrend/momentum switch detection using a single indicator.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n1. Entry:  \n`;
+                        // prompt[1].content += `\nTrend/momentum switch detection using a single indicator.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
                         break;
                     case 2:
-                        prompt[1].content += `\n\n### STEP 2 - Trend Direction`;
-                        prompt[1].content += `\nDetermined using multiple trend indicators.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n2. Trend:  \n`;
+                        // prompt[1].content += `\nDetermined using multiple trend indicators.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
                         break;
                     case 3:
-                        prompt[1].content += `\n\n### STEP 3 - Trend Strength`;
-                        prompt[1].content += `\nMeasured by ADX. Strong if ADX >= 25.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n3. Strength:  \n`;
+                        // prompt[1].content += `\nMeasured by ADX. Strong if ADX >= 25.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone detected'}`;
                         break;
                     case 4:
-                        prompt[1].content += `\n\n### STEP 4 - Reversal Detection (Overbought/Oversold)`;
-                        prompt[1].content += `\nChecks if market conditions could reverse the signal.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n4. Over${signal.long ? 'bought' : 'sold'}:  \n`;
+                        // prompt[1].content += `\nChecks if market conditions could reverse the signal.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : `\tNone detected`}`;
                         break;
                     case 5:
-                        prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
-                        prompt[1].content += `\nDetects candlestick patterns opposing the signal.`;
-                        prompt[1].content += `${data.length ? `Detected patterns: ${data.join(", ")}.` : 'No detected patterns.'}`;
+                        // prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
+                        prompt[1].content += `\n\n5. Candlestick Reversals:  \n`;
+                        // prompt[1].content += `\nDetects candlestick patterns opposing the signal.\n`;
+                        prompt[1].content += `${data.length ? `${data.map(x => `\t- ${x}`).join("\n")}.` : '\tNone detected'}`;
                         break;
                     case 6:
-                        prompt[1].content += `\n\n### STEP 6 - Stop Loss`;
-                        prompt[1].content += `\nStop loss price calculated using a volatility or trend-based indicator.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n6. Stop Loss Price:  \n`;
+                        // prompt[1].content += `\nStop loss price calculated using a volatility or trend-based indicator.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone computed'}`;
                         break;
                     case 7:
-                        prompt[1].content += `\n\n### STEP 7 - Volatility %`;
-                        prompt[1].content += `\nComputed using ATR and expressed as a percentage of current price.`;
-                        prompt[1].content += `${data.join("\n")}`;
+                        prompt[1].content += `\n\n7. Volatility:  \n`;
+                        // prompt[1].content += `\nComputed using ATR and expressed as a percentage of current price.\n`;
+                        prompt[1].content += `${data.length ? data.map(x => `\t- ${x}`).join("\n") : '\tNone computed'}`;
                         break;
                     default:
                     // do nothing
@@ -218,7 +219,12 @@ class BroadcastEngine {
 
             prompt[1].content += `\n\n## SIGNAL\nThe trading script now proposes a **${signal.long ? "LONG" : "SHORT"}** signal. ${occurence > 1 ? `The same signal has occurred ${occurence} times consecutively.` : ''}`;
 
-            prompt[1].content += `\n\n## TASK\nReturn a JSON object only with:\n- \"supported\`: true or false\n- "reason": one-paragraph reasoning\n- "confidence": a number from 0–100`;
+            prompt[1].content += `\n\n## TASK\nReturn a JSON object only with:\n- supported: true/false\n- reason: short paragraph\n- confidence: 0–100`;
+
+            prompt[0].content = prompt[0].content.replace(/ {2,}/g, " ");
+            prompt[1].content = prompt[1].content.replace(/ {2,}/g, " ");
+
+            console.log(prompt);
 
             GroqEngine.request({
                 messages: prompt,

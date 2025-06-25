@@ -573,7 +573,7 @@ class Trader {
                 m += `Ticker 💲 ${symbol}\n`;
                 m += `Open Reason 💬 ${order.open_reason}\n`;
                 m += `Close Reason 💬 ${order.close_reason}\n`;
-                m += `Duration ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}\n`;
+                m += `Durations ⏱️ ${getTimeElapsed(order.open_time, order.close_time)}  🔼 ${getTimeElapsed(order.peak_ts, order.close_time)} 🔽 ${getTimeElapsed(order.least_ts, order.close_time)}\n`;
                 m += `Order 🆔 \`${OID}\`\n`;
                 m += `Client Order 🆔 \`${COID}\`\n`;
                 m += `Size 💰 ${size}\n`;
