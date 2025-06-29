@@ -35,10 +35,20 @@ class Ticker {
      */
     last_fetched;
 
+    /**
+     * Mark Price.
+     * @type {number}
+     */
+    mark_price;
+
+    /**
+     * Returns Mark Price.
+     * @returns {number}
+     */
     getMarkPrice(){
         const data = (this.candlestickData || []);
         const row = (data[data.length - 1] || {});
-        return row.close || 0;
+        return this.mark_price || row.close || 0;
     }
 
     /**
@@ -130,6 +140,7 @@ class Ticker {
     constructor(symbol) {
         this.symbol = symbol;
         this.candlestickData = [];
+        this.mark_price = 0;
         this.fetchCandleStickData();
     }
 

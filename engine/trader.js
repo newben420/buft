@@ -10,6 +10,7 @@ const generateLowercaseAlphanumeric = require("../lib/unique_string");
 const DupSig = require("./dup_sig");
 
 let SigSmooth = null;
+let BroadcastEngine = null;
 
 /**
  * Manages trades and signal exec.
@@ -196,6 +197,10 @@ class Trader {
                                             size: `${amt}`,
                                         });
                                         if (order.msg == "success") {
+                                            if(!BroadcastEngine){
+                                                BroadcastEngine = require("./broadcast");
+                                            }
+                                            delete BroadcastEngine.atr[`${symbol}_${signal.long ? "LONG" : "SHORT"}`];
                                             Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
                                             Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
                                             success = true;

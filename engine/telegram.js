@@ -11,6 +11,8 @@ const Account = require('./account');
 const Signal = require('../model/signal');
 const BitgetEngine = require('./bitget');
 
+let BroadcastEngine = null;
+
 const START_TIME = Date.now();
 
 process.env.NTBA_FIX_350 = true;
@@ -585,10 +587,10 @@ class TelegramEngine {
                             try {
                                 const ticker = TickerEngine.getTicker(symbol);
                                 let m = ``;
-                                if(ticker){
+                                if (ticker) {
                                     m = `✅ ${symbol} ${FFF(ticker.getMarkPrice(), 6)}`;
                                 }
-                                else{
+                                else {
                                     m = `❌ ${symbol} has no added ticker`;
                                 }
                                 TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
@@ -596,6 +598,36 @@ class TelegramEngine {
                                 });
                             } catch (error) {
                                 Log.dev(error);
+                            }
+                        }
+                        else if (content.startsWith("ATR ")) {
+                            if (!BroadcastEngine) {
+                                BroadcastEngine = require("./broadcast");
+                            }
+                            let temp = content.split(" ");
+                            let activate = temp[1] == "true";
+                            let symbol = temp[2];
+                            let signal = temp[3].toLowerCase();
+                            let price = parseFloat(temp[4]);
+                            const { succ, message } = BroadcastEngine.manageATR(activate, symbol, signal, price);
+                            TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
+                                text: message,
+                            });
+                            if (succ) {
+                                TelegramEngine.#bot.editMessageReplyMarkup({
+                                    inline_keyboard: [
+                                        callbackQuery.message.reply_markup.inline_keyboard[0],
+                                        [
+                                            {
+                                                text: `${(activate) ? 'Dea' : 'A'}ctivate ATR Buy`,
+                                                callback_data: `ATR_${activate ? "false" : "true"}_${symbol}_${signal.toUpperCase()}_${price}`,
+                                            },
+                                        ]
+                                    ]
+                                }, {
+                                    chat_id: Site.TG_CHAT_ID,
+                                    message_id: callbackQuery.message.message_id,
+                                });
                             }
                         }
                         else if (content.startsWith("close ")) {

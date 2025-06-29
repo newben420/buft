@@ -102,6 +102,8 @@ class Site {
     static GROQ_USE = (process.env["GROQ_USE"] || "").toLowerCase() == "true";
     static GROQ_MAX_HISTORY_COUNT = parseInt(process.env["GROQ_MAX_HISTORY_COUNT"] || "0") || 5;
 
+    static ATR_INTERVAL_MS = parseInt(process.env.ATR_INTERVAL_MS || "0") || 5000;
+    static ATR_TIMEOUT_MS = parseInt(process.env.ATR_TIMEOUT_MS || "0") || 1800000;
 }
 
 module.exports = Site;

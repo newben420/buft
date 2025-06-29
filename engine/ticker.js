@@ -49,6 +49,7 @@ class TickerEngine {
                         Analysis = require("./analysis");
                     }
                     Analysis.removeTicker(symbol);
+                    BitgetEngine.getWSClient().unsubscribeTopic("USDT-FUTURES", "ticker", symbol);
                     resolve(true);
                 }
                 else {
@@ -115,6 +116,7 @@ class TickerEngine {
                                 if (passed.length == levy.length) {
                                     Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
                                     TickerEngine.#tickers[data.symbol] = new Ticker(data.symbol);
+                                    BitgetEngine.getWSClient().subscribeTopic('USDT-FUTURES', 'ticker', symbol);
                                     resolve(true);
                                 }
                                 else {
@@ -130,6 +132,7 @@ class TickerEngine {
                         else {
                             Log.flow(`TickerEngine > Add > ${symbol} > Successful.`, 2);
                             TickerEngine.#tickers[symbol] = new Ticker(symbol);
+                            BitgetEngine.getWSClient().subscribeTopic('USDT-FUTURES', 'ticker', symbol);
                             resolve(true);
                         }
                     } catch (error) {
@@ -140,6 +143,17 @@ class TickerEngine {
                 }
             }
         })
+    }
+
+    /**
+     * Updates mark price of a ticker.
+     * @param {string} symbol 
+     * @param {number} price 
+     */
+    static updateMarkPrice = (symbol, price) => {
+        if(TickerEngine.#tickers[symbol]){
+            TickerEngine.#tickers[symbol].mark_price = price;
+        }
     }
 
     /**

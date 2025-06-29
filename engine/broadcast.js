@@ -5,6 +5,9 @@ const Site = require("../site");
 const { GroqEngine } = require("./groq");
 const Log = require("../lib/log");
 const getTimeElapsed = require("../lib/get_time_elapsed");
+const Signal = require("../model/signal");
+
+let Trader = null;
 
 /**
  * Helps track recurring signals.
@@ -59,6 +62,41 @@ class Occurrence {
     }
 }
 
+class ATRBuyData {
+    /**
+     * @type {string}
+     */
+    symbol;
+
+    /**
+     * @type {'long'|'short'}
+     */
+    signal;
+
+    /**
+     * @type {number}
+     */
+    price;
+
+    /**
+     * @type {number}
+     */
+    ts;
+
+    /**
+     * OBJ cons
+     * @param {string} symbol 
+     * @param {'long'|'short'} signal 
+     * @param {number} price 
+     */
+    constructor(symbol, signal, price) {
+        this.symbol = symbol;
+        this.signal = signal;
+        this.price = price;
+        this.ts = Date.now();
+    }
+}
+
 let TelegramEngine = null;
 /**
  * This broadcasts signals to telegram bot in realtime.
@@ -70,6 +108,12 @@ class BroadcastEngine {
      * @type {Record<string, Occurrence>}
      */
     static #occ = {};
+
+    /**
+     * Keeps track of ATR Buys
+     * @type {Record<string, ATRBuyData>}
+     */
+    static atr = {}
 
     /**
      * Signals are passed here from analysis
@@ -104,20 +148,32 @@ class BroadcastEngine {
             m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict}\`\`\``;
         }
 
+        const ATRID = `${ticker}_${signal.long ? "LONG" : "SHORT"}`;
+        const ATRPF = ((signal.volatilityPerc || 0) / 100) * (signal.markPrice || 0);
+        const ATRP = signal.long ? ((signal.markPrice || 0) + ATRPF) : ((signal.markPrice || 0) - ATRPF);
+        const isReg = BroadcastEngine.atr[ATRID] ? true : false;
+
         /**
          * @type {TelegramBot.InlineKeyboardButton[][]}
          */
-        let inline = [[
-        ], [
-            {
-                text: `Create Order`,
-                callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
-            },
-            {
-                text: `Mark Price`,
-                callback_data: `price_${ticker}`,
-            }
-        ]];
+        let inline = [
+            [
+                {
+                    text: `Create Order`,
+                    callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
+                },
+                {
+                    text: `Mark Price`,
+                    callback_data: `price_${ticker}`,
+                }
+            ],
+            [
+                {
+                    text: `${isReg ? 'Dea' : 'A'}ctivate ATR Buy`,
+                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}_${ATRP}`,
+                },
+            ],
+        ];
 
         TelegramEngine.sendMessage(m, mid => {
         }, {
@@ -127,6 +183,126 @@ class BroadcastEngine {
                 inline_keyboard: inline,
             }
         });
+    }
+
+    /**
+     * @type {Record<string, boolean>}
+     */
+    static #executingATR = {};
+
+    /**
+     * Updates mark price of a ticker.
+     * @param {string} symbol 
+     * @param {number} price 
+     */
+    static updateMarkPrice = async (symbol, price) => {
+        if (!Trader) {
+            Trader = require("./trader");
+        }
+        if (!TelegramEngine) {
+            TelegramEngine = require("./telegram");
+        }
+        if (BroadcastEngine.atr[`${symbol}_LONG`]) {
+            if (!BroadcastEngine.#executingATR[`${symbol}_LONG`]) {
+                BroadcastEngine.#executingATR[`${symbol}_LONG`] = true;
+                const atd = BroadcastEngine.atr[`${symbol}_LONG`];
+                if (price >= atd.price) {
+                    const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
+                    const done = await Trader.openOrder(symbol, signal, true);
+                    if (done) {
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol}_LONG at ${FFF(price)}`);
+                    }
+                    else {
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol}_LONG at ${FFF(price)}`);
+                    }
+                    delete BroadcastEngine.atr[`${symbol}_LONG`];
+                }
+                delete BroadcastEngine.#executingATR[`${symbol}_LONG`];
+            }
+        }
+        if (BroadcastEngine.atr[`${symbol}_SHORT`]) {
+            if (!BroadcastEngine.#executingATR[`${symbol}_SHORT`]) {
+                BroadcastEngine.#executingATR[`${symbol}_SHORT`] = true;
+                const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
+                if (price <= atd.price) {
+                    const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
+                    const done = await Trader.openOrder(symbol, signal, true);
+                    if (done) {
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol}_SHORT at ${FFF(price)}`);
+                    }
+                    else {
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol}_SHORT at ${FFF(price)}`);
+                    }
+                    delete BroadcastEngine.atr[`${symbol}_SHORT`];
+                }
+                delete BroadcastEngine.#executingATR[`${symbol}_SHORT`];
+            }
+        }
+    }
+
+    /**
+     * @type {NodeJS.Timeout}
+     */
+    static #ATRGabbageCollector;
+
+    /**
+     * @returns {Promise<boolean>}
+     */
+    static init = () => new Promise((resolve, reject) => {
+        BroadcastEngine.#ATRGabbageCollector = setInterval(() => {
+            Object.keys(BroadcastEngine.atr).filter(id => (Date.now() - BroadcastEngine.atr[id].ts) >= Site.ATR_TIMEOUT_MS).forEach(id => {
+                delete BroadcastEngine.atr[id];
+            });
+        }, Site.ATR_INTERVAL_MS);
+        resolve(true);
+    });
+
+    /**
+     * @returns {Promise<boolean>}
+     */
+    static exit = () => new Promise((resolve, reject) => {
+        if (BroadcastEngine.#ATRGabbageCollector) {
+            clearInterval(BroadcastEngine.#ATRGabbageCollector);
+        }
+        resolve(true);
+    });
+
+    /**
+     * This is used to set/unset ATR buy.
+     * @param {boolean} activate 
+     * @param {string} symbol 
+     * @param {'long'|'short'} signal 
+     * @param {number} price 
+     */
+    static manageATR = (activate, symbol, signal, price) => {
+        let message = ``;
+        let succ = true;
+        const id = `${symbol}_${signal.toUpperCase()}`;
+        if (activate) {
+            // SET NEW ATR
+            if (BroadcastEngine.atr[id]) {
+                succ = false
+                message = `❌ ATR Buy already set for ${id}`;
+            }
+            else {
+                BroadcastEngine.atr[id] = new ATRBuyData(symbol, signal, price);
+                succ = true
+                message = `✅ ATR Buy set for ${id} at price ${FFF(price)}`;
+            }
+        }
+        else {
+            // UNSET EXISITNG ATR
+            if (BroadcastEngine.atr[id]) {
+                delete BroadcastEngine.atr[id];
+                succ = true
+                message = `✅ ATR Buy unset for ${id} at price ${FFF(price)}`;
+            }
+            else {
+                succ = false
+                message = `❌ No ATR Buy set for ${id}`;
+            }
+        }
+        return { succ, message };
     }
 
     /**
@@ -204,13 +380,13 @@ class BroadcastEngine {
                         prompt[1].content += `${data.length ? data.map(x => `${x}`).join("") : 'None'}`;
                         break;
                     case 4:
-                        prompt[1].content += `\n\nOver${signal.long ? 'bought' : 'sold'}: `;
+                        prompt[1].content += `\n\nOver${signal.long ? 'bought' : 'sold'} (Checks if market conditions could reverse the signal): `;
                         // prompt[1].content += `\nChecks if market conditions could reverse the signal.\n`;
                         prompt[1].content += `${data.length ? '\n' + data.map(x => `- ${x}`).join("\n") : `None`}`;
                         break;
                     case 5:
                         // prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
-                        prompt[1].content += `\n\nReversal Candles: `;
+                        prompt[1].content += `\n\nReversal Candles (Detects candlestick patterns opposing the signal): `;
                         // prompt[1].content += `\nDetects candlestick patterns opposing the signal.\n`;
                         prompt[1].content += `${data.length ? `${data.map(x => `${x}`).join(",")}` : 'None'}`;
                         break;

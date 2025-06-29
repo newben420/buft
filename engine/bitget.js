@@ -4,6 +4,9 @@ const Log = require("../lib/log");
 const getDateTime = require("../lib/get_date_time");
 const FFF = require("../lib/fff");
 
+let TickerEngine = null;
+let BroadcastEngine = null;
+
 // Disable all logging on the silly level (less console logs)
 const customLogger = {
     ...DefaultLogger,
@@ -89,6 +92,18 @@ class BitgetEngine {
                         if (data.arg.channel == "account" && data.data && Array.isArray(data.data)) {
                             const bal = (data.data.filter(x => x.marginCoin == Site.TK_MARGIN_COIN)[0] || {}).available || 0;
                             BitgetEngine.#getCallback("balance_update")(bal);
+                        }
+                        if(data.arg.channel == "ticker" && data.data && Array.isArray(data.data)){
+                            if(!TickerEngine){
+                                TickerEngine = require("./ticker");
+                            }
+                            if(!BroadcastEngine){
+                                BroadcastEngine = require("./broadcast");
+                            }
+                            for(const ticker of data.data){
+                                BroadcastEngine.updateMarkPrice(ticker.instId, parseFloat(ticker.lastPr));
+                                TickerEngine.updateMarkPrice(ticker.instId, parseFloat(ticker.lastPr));
+                            }
                         }
                         if (data.arg.channel == "orders" && data.data && Array.isArray(data.data)) {
                             for (const order of data.data) {

@@ -1,5 +1,6 @@
 const Site = require("../site");
 const Analysis = require("./analysis");
+const BroadcastEngine = require("./broadcast");
 const { GroqEngine } = require("./groq");
 const TelegramEngine = require("./telegram");
 
@@ -12,6 +13,7 @@ const stopEngine = () => {
         await Promise.all([
             Analysis.stop(),
             GroqEngine.shutdown(),
+            BroadcastEngine.exit(),
         ]);
         if (Site.TG_SEND_STOP) {
             TelegramEngine.sendMessage(`😴 *${Site.TITLE}* is going to sleep`, r => {
