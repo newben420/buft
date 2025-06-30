@@ -339,7 +339,7 @@ class BroadcastEngine {
             prompt[0].content += `\n\nGiven structured data and recent signal history, determine if the proposed signal is valid.`;
             prompt[0].content += `\n\nRespond ONLY with a JSON object like:`;
             prompt[0].content += `\n\n{\n\t"supported": boolean,\n\t"reason": string,\n\t"confidence": number (0 to 100)\n}`;
-            prompt[0].content += `\n\nExample:\n{\n\t"supported": true,\n\t"reason": "ADX confirms strong trend and no reversal signs, supporting the short signal.",\n\t"confidence": 84\n}`;
+            prompt[0].content += `\n\nExample:\n{\n\t"supported": true,\n\t"reason": "ADX confirms strong trend and no reversal signs, supporting the short signal.",\n\t"confidence": 84\n}\n\nNote: Numeric values in parentheses (e.g., 14 or 9/26/52/26) beside indicators represent their parameters when applicable.`;
 
             prompt[1].content += `# INPUT\n${rawPrompt[0].join("\n")}`;
 
@@ -388,7 +388,7 @@ class BroadcastEngine {
                         // prompt[1].content += `\n\n### STEP 5 - Candlestick Reversal Patterns`;
                         prompt[1].content += `\n\nReversal Candles (Detects candlestick patterns opposing the signal): `;
                         // prompt[1].content += `\nDetects candlestick patterns opposing the signal.\n`;
-                        prompt[1].content += `${data.length ? `${data.map(x => `${x}`).join(",")}` : 'None'}`;
+                        prompt[1].content += `${data.length ? `${data.map(x => `${x}`).join(", ")}` : 'None'}`;
                         break;
                     case 6:
                         prompt[1].content += `\n\nStop Loss Price:  \n`;
@@ -412,7 +412,7 @@ class BroadcastEngine {
             prompt[0].content = prompt[0].content.replace(/ {2,}/g, " ");
             prompt[1].content = prompt[1].content.replace(/ {2,}/g, " ");
 
-            console.log(prompt);
+            if(process.env.COLLER) console.log(prompt);
 
             GroqEngine.request({
                 messages: prompt,

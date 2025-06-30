@@ -1,3 +1,4 @@
+process.env.COLLER = true;
 const arg = process.argv.slice(2);
 if (arg.length && arg[0] == "nc") {
     process.argv.splice(2, 0, ".env");

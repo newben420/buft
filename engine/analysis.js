@@ -867,7 +867,7 @@ class Analysis {
 
                 // CONCLUDE ANALYSIS
                 Log.flow(`Analysis > ${symbol} > Success > Long: ${signal.long ? "Yes" : "No"} | Short: ${signal.short ? "Yes" : "No"} | Price: ${FFF(latestRate)}${stoploss ? ` | Stoploss: ${FFF(stoploss)}` : ""}.`, 5);
-                if ((signal.long || signal.short) && Site.BROADCAST) {
+                if ((signal.long || signal.short) && (Site.BROADCAST || process.env.COLLER)) {
                     if (!BroadcastEngine) {
                         BroadcastEngine = require("./broadcast");
                     }
