@@ -8,6 +8,7 @@ const getTimeElapsed = require("../lib/get_time_elapsed");
 const Signal = require("../model/signal");
 
 let Trader = null;
+let TelegramEngine = null;
 
 /**
  * Helps track recurring signals.
@@ -84,20 +85,33 @@ class ATRBuyData {
     ts;
 
     /**
+     * @type {number}
+     */
+    vol;
+
+    /**
+     * @type {number}
+     */
+    sl;
+
+    /**
      * OBJ cons
      * @param {string} symbol 
      * @param {'long'|'short'} signal 
      * @param {number} price 
+     * @param {number} vol 
+     * @param {number} sl 
      */
-    constructor(symbol, signal, price) {
+    constructor(symbol, signal, price, vol, sl) {
         this.symbol = symbol;
         this.signal = signal;
         this.price = price;
+        this.vol = vol;
+        this.sl = sl;
         this.ts = Date.now();
     }
 }
 
-let TelegramEngine = null;
 /**
  * This broadcasts signals to telegram bot in realtime.
  */
@@ -118,7 +132,7 @@ class BroadcastEngine {
     /**
      * Signals are passed here from analysis
      * @param {string} ticker 
-     * @param {Record<string, any>} signal 
+     * @param {Signal} signal 
      * @param {string[][]} rawPrompt
      */
     static entry = async (ticker, signal, rawPrompt) => {
@@ -145,12 +159,27 @@ class BroadcastEngine {
         const verdict = await BroadcastEngine.#computePrompt(ticker, signal, rawPrompt, occurence);
 
         if (verdict) {
-            m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict}\`\`\``;
+            m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict.str}\`\`\``;
         }
 
         const ATRID = `${ticker}_${signal.long ? "LONG" : "SHORT"}`;
         const ATRPF = ((signal.volatilityPerc || 0) / 100) * (signal.markPrice || 0);
         const ATRP = signal.long ? ((signal.markPrice || 0) + ATRPF) : ((signal.markPrice || 0) - ATRPF);
+        let verd = verdict ? verdict.obj : { confidence: 0, reason: '', supported: false };
+        let autoEnabled = false;
+        for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
+            let cond = Site.ATR_AUTO_ENABLE[i];
+            if (occurence <= cond.maxOccur && occurence >= cond.minOccur && verd.confidence >= cond.minConf && (cond.supportReq ? verd.supported : true)) {
+                autoEnabled = true;
+                break;
+            }
+        }
+        if (autoEnabled) {
+            // if (BroadcastEngine.atr[ATRID]) {
+            //     delete BroadcastEngine.atr[ATRID];
+            // }
+            BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short", ATRP, signal.volatilityPerc, signal.tpsl);
+        }
         const isReg = BroadcastEngine.atr[ATRID] ? true : false;
 
         /**
@@ -170,7 +199,7 @@ class BroadcastEngine {
             [
                 {
                     text: `${isReg ? 'Dea' : 'A'}ctivate ATR Buy`,
-                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}_${ATRP}`,
+                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}_${ATRP}_${signal.volatilityPerc}_${signal.tpsl}`,
                 },
             ],
         ];
@@ -207,13 +236,15 @@ class BroadcastEngine {
                 BroadcastEngine.#executingATR[`${symbol}_LONG`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_LONG`];
                 if (price >= atd.price) {
-                    const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
-                    const done = await Trader.openOrder(symbol, signal, true);
+                    // const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
+                    const mark = atd.price / (1 + (atd.vol) / 100);
+                    const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
+                    const done = await Trader.openOrder(symbol, signal, false);
                     if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol}_LONG at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)}`);
                     }
                     else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol}_LONG at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)}`);
                     }
                     delete BroadcastEngine.atr[`${symbol}_LONG`];
                 }
@@ -225,13 +256,15 @@ class BroadcastEngine {
                 BroadcastEngine.#executingATR[`${symbol}_SHORT`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
                 if (price <= atd.price) {
-                    const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
-                    const done = await Trader.openOrder(symbol, signal, true);
+                    // const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
+                    const mark = atd.price / (1 - (atd.vol) / 100);
+                    const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
+                    const done = await Trader.openOrder(symbol, signal, false);
                     if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol}_SHORT at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)}`);
                     }
                     else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol}_SHORT at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)}`);
                     }
                     delete BroadcastEngine.atr[`${symbol}_SHORT`];
                 }
@@ -273,8 +306,10 @@ class BroadcastEngine {
      * @param {string} symbol 
      * @param {'long'|'short'} signal 
      * @param {number} price 
+     * @param {number} vol 
+     * @param {number} sl 
      */
-    static manageATR = (activate, symbol, signal, price) => {
+    static manageATR = (activate, symbol, signal, price, vol, sl) => {
         let message = ``;
         let succ = true;
         const id = `${symbol}_${signal.toUpperCase()}`;
@@ -285,7 +320,7 @@ class BroadcastEngine {
                 message = `❌ ATR Buy already set for ${id}`;
             }
             else {
-                BroadcastEngine.atr[id] = new ATRBuyData(symbol, signal, price);
+                BroadcastEngine.atr[id] = new ATRBuyData(symbol, signal, price, vol, sl);
                 succ = true
                 message = `✅ ATR Buy set for ${id} at price ${FFF(price)}`;
             }
@@ -317,7 +352,7 @@ class BroadcastEngine {
      * @param {Record<string, any>} signal 
      * @param {string[][]} rawPrompt
      * @param {number} occurence
-     * @returns {Promise<string|null>}
+     * @returns {Promise<{str: string, obj: {supported: boolean, reason: string, confidence: number}}|null>}
      */
     static #computePrompt = (ticker, signal, rawPrompt, occurence) => {
         return new Promise((resolve, reject) => {
@@ -412,7 +447,7 @@ class BroadcastEngine {
             prompt[0].content = prompt[0].content.replace(/ {2,}/g, " ");
             prompt[1].content = prompt[1].content.replace(/ {2,}/g, " ");
 
-            if(process.env.COLLER) console.log(prompt);
+            if (process.env.COLLER) console.log(prompt);
 
             GroqEngine.request({
                 messages: prompt,
@@ -426,7 +461,14 @@ class BroadcastEngine {
                             if (BroadcastEngine.#aiHistory[ticker].length > Site.GROQ_MAX_HISTORY_COUNT) {
                                 BroadcastEngine.#aiHistory[ticker] = BroadcastEngine.#aiHistory[ticker].slice(BroadcastEngine.#aiHistory[ticker].length - Site.GROQ_MAX_HISTORY_COUNT);
                             }
-                            resolve(`Supported: ${supported ? 'Yes' : 'No'}\nReason: ${reason}\nConfidence: ${confidence}`);
+                            resolve({
+                                str: `Supported: ${supported ? 'Yes' : 'No'}\nReason: ${reason}\nConfidence: ${confidence}`,
+                                obj: {
+                                    confidence: confidence,
+                                    reason: reason,
+                                    supported: supported,
+                                }
+                            });
                         } catch (error) {
                             Log.dev(error);
                             resolve(null);

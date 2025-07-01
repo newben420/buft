@@ -104,6 +104,7 @@ class Site {
 
     static ATR_INTERVAL_MS = parseInt(process.env.ATR_INTERVAL_MS || "0") || 5000;
     static ATR_TIMEOUT_MS = parseInt(process.env.ATR_TIMEOUT_MS || "0") || 1800000;
+    static ATR_AUTO_ENABLE = (process.env.ATR_AUTO_ENABLE || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minOccur: x[0] || 0, maxOccur: x[1] || 0, minConf: x[2] || 0, supportReq: x[3] == 1})).filter(x => true);
 }
 
 module.exports = Site;

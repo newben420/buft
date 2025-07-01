@@ -609,7 +609,9 @@ class TelegramEngine {
                             let symbol = temp[2];
                             let signal = temp[3].toLowerCase();
                             let price = parseFloat(temp[4]);
-                            const { succ, message } = BroadcastEngine.manageATR(activate, symbol, signal, price);
+                            let vol = parseFloat(temp[5]);
+                            let sl = parseFloat(temp[6]);
+                            const { succ, message } = BroadcastEngine.manageATR(activate, symbol, signal, price, vol, sl);
                             TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                 text: message,
                             });
@@ -620,7 +622,7 @@ class TelegramEngine {
                                         [
                                             {
                                                 text: `${(activate) ? 'Dea' : 'A'}ctivate ATR Buy`,
-                                                callback_data: `ATR_${activate ? "false" : "true"}_${symbol}_${signal.toUpperCase()}_${price}`,
+                                                callback_data: `ATR_${activate ? "false" : "true"}_${symbol}_${signal.toUpperCase()}_${price}_${vol}_${sl}`,
                                             },
                                         ]
                                     ]
