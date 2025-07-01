@@ -178,7 +178,7 @@ class BroadcastEngine {
             // if (BroadcastEngine.atr[ATRID]) {
             //     delete BroadcastEngine.atr[ATRID];
             // }
-            BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short", ATRP, signal.volatilityPerc, signal.tpsl);
+            // BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short", ATRP, signal.volatilityPerc, signal.tpsl);
         }
         const isReg = BroadcastEngine.atr[ATRID] ? true : false;
 
