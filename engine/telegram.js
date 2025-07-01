@@ -214,7 +214,7 @@ class TelegramEngine {
             }
             arr.push({
                 text: `💰`,
-                callback_data: `price_${ticker.symbol}`,
+                callback_data: `p_${ticker.symbol}`,
             });
             inline.push(arr);
         }
@@ -581,7 +581,7 @@ class TelegramEngine {
                                 Log.dev(error);
                             }
                         }
-                        else if (content.startsWith("price ")) {
+                        else if (content.startsWith("price ") || content.startsWith("p ")) {
                             let temp1 = content.split(" ");
                             let symbol = temp1[1];
                             try {
@@ -608,10 +608,7 @@ class TelegramEngine {
                             let activate = temp[1] == "true";
                             let symbol = temp[2];
                             let signal = temp[3].toLowerCase();
-                            let price = parseFloat(temp[4]);
-                            let vol = parseFloat(temp[5]);
-                            let sl = parseFloat(temp[6]);
-                            const { succ, message } = BroadcastEngine.manageATR(activate, symbol, signal, price, vol, sl);
+                            const { succ, message } = BroadcastEngine.manageATR(activate, symbol, signal);
                             TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id, {
                                 text: message,
                             });
@@ -622,7 +619,7 @@ class TelegramEngine {
                                         [
                                             {
                                                 text: `${(activate) ? 'Dea' : 'A'}ctivate ATR Buy`,
-                                                callback_data: `ATR_${activate ? "false" : "true"}_${symbol}_${signal.toUpperCase()}_${price}_${vol}_${sl}`,
+                                                callback_data: `ATR_${activate ? "false" : "true"}_${symbol}_${signal.toUpperCase()}`,
                                             },
                                         ]
                                     ]

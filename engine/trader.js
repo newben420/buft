@@ -126,13 +126,14 @@ class Trader {
      * @param {string} symbol 
      * @param {Signal} signal 
      * @param {boolean} manual 
+     * @param {boolean} atr 
      * @returns {Promise<boolean>}
      */
-    static openOrder = (symbol, signal, manual = false) => {
+    static openOrder = (symbol, signal, manual = false, atr = false) => {
         return new Promise(async (resolve, reject) => {
             Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
             const index = (Trader.#orders.findIndex(x => x.symbol == symbol) < 0) && (Trader.#tempOrders.findIndex(x => x.symbol == symbol) < 0);
-            if ((manual ? true : Trader.#enabled) && index && Trader.#orders.length < Site.TR_GRID_LENGTH) {
+            if (((manual || atr) ? true : Trader.#enabled) && index && Trader.#orders.length < Site.TR_GRID_LENGTH) {
                 // Signal can be executed
                 if (!Trader.#isOpening) {
                     Trader.#isOpening = true;

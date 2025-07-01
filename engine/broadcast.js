@@ -112,6 +112,41 @@ class ATRBuyData {
     }
 }
 
+class SignalCache {
+    /**
+     * @type {number}
+     */
+    execPrice;
+
+    /**
+     * @type {number}
+     */
+    sl;
+
+    /**
+     * @type {number}
+     */
+    volPerc;
+
+    /**
+     * @type {number}
+     */
+    markPrice;
+
+    /**
+     * @param {number} ep 
+     * @param {number} sl 
+     * @param {number} v 
+     * @param {number} mp 
+     */
+    constructor(ep, sl, v, mp) {
+        this.execPrice = ep;
+        this.markPrice = mp;
+        this.sl = sl;
+        this.volPerc = v;
+    }
+}
+
 /**
  * This broadcasts signals to telegram bot in realtime.
  */
@@ -122,6 +157,11 @@ class BroadcastEngine {
      * @type {Record<string, Occurrence>}
      */
     static #occ = {};
+
+    /**
+     * @type {Record<string, SignalCache>}
+     */
+    static #sigCache = {};
 
     /**
      * Keeps track of ATR Buys
@@ -136,6 +176,8 @@ class BroadcastEngine {
      * @param {string[][]} rawPrompt
      */
     static entry = async (ticker, signal, rawPrompt) => {
+
+        // console.log(rawPrompt);
         if (!TelegramEngine) {
             TelegramEngine = require("./telegram");
         }
@@ -166,6 +208,10 @@ class BroadcastEngine {
         const ATRPF = ((signal.volatilityPerc || 0) / 100) * (signal.markPrice || 0);
         const ATRP = signal.long ? ((signal.markPrice || 0) + ATRPF) : ((signal.markPrice || 0) - ATRPF);
         let verd = verdict ? verdict.obj : { confidence: 0, reason: '', supported: false };
+        if (BroadcastEngine.#sigCache[ATRID]) {
+            delete BroadcastEngine.#sigCache[ATRID];
+        }
+        BroadcastEngine.#sigCache[ATRID] = new SignalCache(ATRP, signal.tpsl, signal.volatilityPerc, signal.markPrice);
         let autoEnabled = false;
         for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
             let cond = Site.ATR_AUTO_ENABLE[i];
@@ -175,10 +221,10 @@ class BroadcastEngine {
             }
         }
         if (autoEnabled) {
-            // if (BroadcastEngine.atr[ATRID]) {
-            //     delete BroadcastEngine.atr[ATRID];
-            // }
-            // BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short", ATRP, signal.volatilityPerc, signal.tpsl);
+            if (BroadcastEngine.atr[ATRID]) {
+                delete BroadcastEngine.atr[ATRID];
+            }
+            BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short");
         }
         const isReg = BroadcastEngine.atr[ATRID] ? true : false;
 
@@ -199,7 +245,7 @@ class BroadcastEngine {
             [
                 {
                     text: `${isReg ? 'Dea' : 'A'}ctivate ATR Buy`,
-                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}_${ATRP}_${signal.volatilityPerc}_${signal.tpsl}`,
+                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}`,
                 },
             ],
         ];
@@ -239,7 +285,7 @@ class BroadcastEngine {
                     // const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                     const mark = atd.price / (1 + (atd.vol) / 100);
                     const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
-                    const done = await Trader.openOrder(symbol, signal, false);
+                    const done = await Trader.openOrder(symbol, signal, false, true);
                     if (done) {
                         TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)}`);
                     }
@@ -259,7 +305,7 @@ class BroadcastEngine {
                     // const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                     const mark = atd.price / (1 - (atd.vol) / 100);
                     const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
-                    const done = await Trader.openOrder(symbol, signal, false);
+                    const done = await Trader.openOrder(symbol, signal, false, true);
                     if (done) {
                         TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)}`);
                     }
@@ -305,37 +351,44 @@ class BroadcastEngine {
      * @param {boolean} activate 
      * @param {string} symbol 
      * @param {'long'|'short'} signal 
-     * @param {number} price 
-     * @param {number} vol 
-     * @param {number} sl 
      */
-    static manageATR = (activate, symbol, signal, price, vol, sl) => {
+    static manageATR = (activate, symbol, signal) => {
         let message = ``;
         let succ = true;
         const id = `${symbol}_${signal.toUpperCase()}`;
-        if (activate) {
-            // SET NEW ATR
-            if (BroadcastEngine.atr[id]) {
-                succ = false
-                message = `❌ ATR Buy already set for ${id}`;
+        if (BroadcastEngine.#sigCache[id]) {
+            const vol = BroadcastEngine.#sigCache[id].volPerc;
+            const mp = BroadcastEngine.#sigCache[id].markPrice;
+            const ep = BroadcastEngine.#sigCache[id].execPrice;
+            const sl = BroadcastEngine.#sigCache[id].sl;
+            if (activate) {
+                // SET NEW ATR
+                if (BroadcastEngine.atr[id]) {
+                    succ = false
+                    message = `❌ ATR Buy already set for ${id}`;
+                }
+                else {
+                    BroadcastEngine.atr[id] = new ATRBuyData(symbol, signal, ep, vol, sl);
+                    succ = true
+                    message = `✅ ATR Buy set for ${id} at price ${FFF(ep)}`;
+                }
             }
             else {
-                BroadcastEngine.atr[id] = new ATRBuyData(symbol, signal, price, vol, sl);
-                succ = true
-                message = `✅ ATR Buy set for ${id} at price ${FFF(price)}`;
+                // UNSET EXISITNG ATR
+                if (BroadcastEngine.atr[id]) {
+                    delete BroadcastEngine.atr[id];
+                    succ = true
+                    message = `✅ ATR Buy unset for ${id} at price ${FFF(ep)}`;
+                }
+                else {
+                    succ = false
+                    message = `❌ No ATR Buy set for ${id}`;
+                }
             }
         }
-        else {
-            // UNSET EXISITNG ATR
-            if (BroadcastEngine.atr[id]) {
-                delete BroadcastEngine.atr[id];
-                succ = true
-                message = `✅ ATR Buy unset for ${id} at price ${FFF(price)}`;
-            }
-            else {
-                succ = false
-                message = `❌ No ATR Buy set for ${id}`;
-            }
+        else{
+            succ = false;
+            message = `❌ No signal cache for ${id}`;
         }
         return { succ, message };
     }
@@ -454,6 +507,7 @@ class BroadcastEngine {
                 callback(r) {
                     if (r.succ) {
                         try {
+                            r.message = r.message.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
                             const { supported, reason, confidence } = JSON.parse(r.message);
                             const row = { ts: Date.now(), supported: supported, confidence: confidence, long: signal.long, price: signal.markPrice };
 
