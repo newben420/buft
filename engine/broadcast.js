@@ -170,6 +170,11 @@ class BroadcastEngine {
     static atr = {}
 
     /**
+     * @type {boolean}
+     */
+    static autoATR = Site.ATR_AUTO_ENABLE.length > 0;
+
+    /**
      * Signals are passed here from analysis
      * @param {string} ticker 
      * @param {Signal} signal 
@@ -212,19 +217,21 @@ class BroadcastEngine {
             delete BroadcastEngine.#sigCache[ATRID];
         }
         BroadcastEngine.#sigCache[ATRID] = new SignalCache(ATRP, signal.tpsl, signal.volatilityPerc, signal.markPrice);
-        let autoEnabled = false;
-        for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
-            let cond = Site.ATR_AUTO_ENABLE[i];
-            if (occurence <= cond.maxOccur && occurence >= cond.minOccur && verd.confidence >= cond.minConf && (cond.supportReq ? verd.supported : true)) {
-                autoEnabled = true;
-                break;
+        if (BroadcastEngine.autoATR) {
+            let autoEnabled = false;
+            for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
+                let cond = Site.ATR_AUTO_ENABLE[i];
+                if (occurence <= cond.maxOccur && occurence >= cond.minOccur && verd.confidence >= cond.minConf && (cond.supportReq ? verd.supported : true)) {
+                    autoEnabled = true;
+                    break;
+                }
             }
-        }
-        if (autoEnabled) {
-            if (BroadcastEngine.atr[ATRID]) {
-                delete BroadcastEngine.atr[ATRID];
+            if (autoEnabled) {
+                if (BroadcastEngine.atr[ATRID]) {
+                    delete BroadcastEngine.atr[ATRID];
+                }
+                BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short");
             }
-            BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short");
         }
         const isReg = BroadcastEngine.atr[ATRID] ? true : false;
 
@@ -386,7 +393,7 @@ class BroadcastEngine {
                 }
             }
         }
-        else{
+        else {
             succ = false;
             message = `❌ No signal cache for ${id}`;
         }

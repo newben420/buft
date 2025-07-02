@@ -54,12 +54,17 @@ class TelegramEngine {
      * @returns {any}
      */
     static #getStatsContent = () => {
+        if (!BroadcastEngine) {
+            BroadcastEngine = require("./broadcast");
+        }
+
         /**
          * @type {string}
          */
         let message = `🚀 *${Site.TITLE}* - ${getDateTime()}\n\n`;
         const trader = Trader.isEnabled();
         message += `Trader Enabled ${trader ? `🟢 Yes` : `🔴 No`}\n`;
+        message += `Auto ATR Enabled ${BroadcastEngine.autoATR ? `🟢 Yes` : `🔴 No`}\n`;
         message += `Tickers 💲 ${formatNumber(TickerEngine.getLength())}\n`;
         message += `Active Orders 📈 ${formatNumber(Trader.getOrdersLength())}\n`;
         message += `Balance 💰 ${Site.TK_MARGIN_COIN} ${FFF(Account.getBalance())}\n`;
@@ -77,17 +82,26 @@ class TelegramEngine {
         /**
          * @type {TelegramBot.InlineKeyboardButton[][]}
          */
-        let inline = [[
-            {
-                text: `♻️ Refresh`,
-                callback_data: `refreshstats`,
-            }
-        ], [
-            {
-                text: trader ? `🔴 Disable Trader` : `🟢 Enable Trader`,
-                callback_data: `trader_${trader ? "false" : "true"}`,
-            }
-        ]];
+        let inline = [
+            [
+                {
+                    text: `♻️ Refresh`,
+                    callback_data: `refreshstats`,
+                }
+            ],
+            [
+                {
+                    text: trader ? `🔴 Disable Trader` : `🟢 Enable Trader`,
+                    callback_data: `trader_${trader ? "false" : "true"}`,
+                }
+            ],
+            [
+                {
+                    text: BroadcastEngine.autoATR ? `🔴 Disable Auto ATR` : `🟢 Enable Auto ATR`,
+                    callback_data: `aaa_${BroadcastEngine.autoATR ? "false" : "true"}`,
+                }
+            ],
+        ];
         return { message, inline };
     }
 
@@ -469,6 +483,32 @@ class TelegramEngine {
                             let temp1 = content.split(" ");
                             let newStatus = temp1[1] == "true";
                             const newv = Trader.toggle();
+                            try {
+                                TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
+                                const { message, inline } = TelegramEngine.#getStatsContent();
+                                const done = await TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
+                                    chat_id: Site.TG_CHAT_ID,
+                                    message_id: callbackQuery.message.message_id,
+                                    parse_mode: "MarkdownV2",
+                                    disable_web_page_preview: true,
+                                    reply_markup: {
+                                        inline_keyboard: inline
+                                    }
+                                });
+                                if (done) {
+                                    TelegramEngine.#lastStatContent = message;
+                                }
+                            } catch (error) {
+                                Log.dev(error);
+                            }
+                        }
+                        else if (content.startsWith("aaa ")) {
+                            if (!BroadcastEngine) {
+                                BroadcastEngine = require("./broadcast");
+                            }
+                            let temp1 = content.split(" ");
+                            let newStatus = temp1[1] == "true";
+                            BroadcastEngine.autoATR = newStatus;
                             try {
                                 TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
                                 const { message, inline } = TelegramEngine.#getStatsContent();

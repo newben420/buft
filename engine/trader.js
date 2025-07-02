@@ -104,11 +104,11 @@ class Trader {
     * @param {Signal} signal 
     */
     static newSignal = (symbol, signal) => {
-        if(!SigSmooth){
+        if (!SigSmooth) {
             SigSmooth = require("./sigsmooth");
         }
-        if(Trader.#enabled){
-            if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`) && SigSmooth.entry(symbol, signal)) :false) {
+        if (Trader.#enabled) {
+            if ((signal.long || signal.short) ? (DupSig.check(`${signal.long ? `LONG` : `SHORT`}${symbol}`) && SigSmooth.entry(symbol, signal)) : false) {
                 Trader.openOrder(symbol, signal);
             }
         }
@@ -198,14 +198,14 @@ class Trader {
                                             size: `${amt}`,
                                         });
                                         if (order.msg == "success") {
-                                            if(!BroadcastEngine){
+                                            if (!BroadcastEngine) {
                                                 BroadcastEngine = require("./broadcast");
                                             }
                                             delete BroadcastEngine.atr[`${symbol}_${signal.long ? "LONG" : "SHORT"}`];
                                             Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
                                             Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
                                             success = true;
-                                            if(!manual){
+                                            if (!manual) {
                                                 DupSig.add(`${signal.long ? `LONG` : `SHORT`}${symbol}`);
                                             }
                                         }
@@ -630,9 +630,12 @@ class Trader {
 
 
             // EXIT STRATEGY
+            if (!BroadcastEngine) {
+                BroadcastEngine = require("./broadcast");
+            }
             const breakEvenROE = (((order.breakeven_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
             const liquidationROE = (((order.liquidation_price - order.open_price) / order.open_price) * 100) * (order.side == "long" ? 1 : -1) * order.leverage;
-            if (!Trader.#isClosing[symbol] && Trader.#enabled) {
+            if (!Trader.#isClosing[symbol] && (Trader.#enabled || BroadcastEngine.autoATR)) {
                 if ((order.roi < 0) && (order.sl > 0) && (Math.abs(order.roi) >= Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))))) {
                     // stop loss condition fulfilled
                     order.close_reason = `Stop Loss ${FFF(order.sl)}%`;
@@ -648,7 +651,7 @@ class Trader {
                     order.close_reason = `Auto Take Profit ${FFF((order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))}%`;
                     Trader.closeOrder(symbol);
                 }
-                else if(order.manual){
+                else if (order.manual) {
                     let exitAlready = false;
                     let duration = (Date.now - order.open_time) || 0;
                     let drop = (order.peak_roi - order.roi) || 0;
