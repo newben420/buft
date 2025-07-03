@@ -102,6 +102,14 @@ class TelegramEngine {
                 }
             ],
         ];
+        if (BroadcastEngine.atrCount()) {
+            inline.push([
+                {
+                    text: '🗑 Clear ATR',
+                    callback_data: 'clearatr',
+                }
+            ]);
+        }
         return { message, inline };
     }
 
@@ -446,6 +454,33 @@ class TelegramEngine {
                         } catch (error) {
                             Log.dev(error);
                         }
+                    }
+                    else if (callbackQuery.data == "clearatr") {
+                        try {
+                            if (!BroadcastEngine) {
+                                BroadcastEngine = require("./broadcast");
+                            }
+                            BroadcastEngine.clearATR();
+                            TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
+                            const { message, inline } = TelegramEngine.#getStatsContent();
+                            if (message != TelegramEngine.#lastStatContent) {
+                                const done = await TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
+                                    chat_id: Site.TG_CHAT_ID,
+                                    message_id: callbackQuery.message.message_id,
+                                    parse_mode: "MarkdownV2",
+                                    disable_web_page_preview: true,
+                                    reply_markup: {
+                                        inline_keyboard: inline
+                                    }
+                                });
+                                if (done) {
+                                    TelegramEngine.#lastStatContent = message;
+                                }
+                            }
+                        } catch (error) {
+                            Log.dev(error);
+                        }
+
                     }
                     if (callbackQuery.data == "refreshorders") {
                         try {

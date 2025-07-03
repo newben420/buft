@@ -169,6 +169,15 @@ class BroadcastEngine {
      */
     static atr = {}
 
+    static atrCount = () => Object.keys(BroadcastEngine.atr).length;
+
+    static clearATR = () => {
+        Object.keys(BroadcastEngine.atr).forEach(key => {
+            delete BroadcastEngine.atr[key];
+        })
+        return true;
+    }
+
     /**
      * @type {boolean}
      */
@@ -288,16 +297,16 @@ class BroadcastEngine {
             if (!BroadcastEngine.#executingATR[`${symbol}_LONG`]) {
                 BroadcastEngine.#executingATR[`${symbol}_LONG`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_LONG`];
-                if (price >= atd.price) {
+                if (price >= atd.price && BroadcastEngine.autoATR) {
                     // const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                     const mark = atd.price / (1 + (atd.vol) / 100);
                     const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
                     const done = await Trader.openOrder(symbol, signal, false, true);
                     if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                     }
                     else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                     }
                     delete BroadcastEngine.atr[`${symbol}_LONG`];
                 }
@@ -308,16 +317,16 @@ class BroadcastEngine {
             if (!BroadcastEngine.#executingATR[`${symbol}_SHORT`]) {
                 BroadcastEngine.#executingATR[`${symbol}_SHORT`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
-                if (price <= atd.price) {
+                if (price <= atd.price && BroadcastEngine.autoATR) {
                     // const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
                     const mark = atd.price / (1 - (atd.vol) / 100);
                     const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
                     const done = await Trader.openOrder(symbol, signal, false, true);
                     if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                     }
                     else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)}`);
+                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                     }
                     delete BroadcastEngine.atr[`${symbol}_SHORT`];
                 }

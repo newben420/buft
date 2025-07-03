@@ -638,17 +638,17 @@ class Trader {
             if (!Trader.#isClosing[symbol] && (Trader.#enabled || BroadcastEngine.autoATR)) {
                 if ((order.roi < 0) && (order.sl > 0) && (Math.abs(order.roi) >= Math.min(Math.abs(liquidationROE), (Math.min((Site.TR_STOPLOSS_PERC_RANGE.max || 100), Math.max((Site.TR_STOPLOSS_PERC_RANGE.min || 0), (order.sl * order.leverage))))))) {
                     // stop loss condition fulfilled
-                    order.close_reason = `Stop Loss ${FFF(order.sl)}%`;
+                    order.close_reason = `Stop Loss ${FFF(order.sl)}`;
                     Trader.closeOrder(symbol);
                 }
                 else if (order.manual && Site.TR_MANUAL_TAKEPROFIT_PERC && (order.roi > 0) && ((order.roi - breakEvenROE) >= Site.TR_MANUAL_STOPLOSS_PERC)) {
                     // Take profit for manual orders
-                    order.close_reason = `Manual Take Profit ${FFF(Site.TR_MANUAL_TAKEPROFIT_PERC)}%`;
+                    order.close_reason = `Manual Take Profit ${FFF(Site.TR_MANUAL_TAKEPROFIT_PERC)}`;
                     Trader.closeOrder(symbol);
                 }
                 else if ((!order.manual) && (order.sl > 0) && (Site.TR_AUTOMATIC_TP_SL_MULTIPLIER > 0) && ((order.roi - breakEvenROE) >= ((order.sl * order.leverage) * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))) {
                     // Take profit for automatic orders
-                    order.close_reason = `Auto Take Profit ${FFF((order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))}%`;
+                    order.close_reason = `Auto Take Profit ${FFF((order.sl * Site.TR_AUTOMATIC_TP_SL_MULTIPLIER))}`;
                     Trader.closeOrder(symbol);
                 }
                 else if (order.manual) {
