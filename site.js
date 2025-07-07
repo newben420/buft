@@ -105,6 +105,10 @@ class Site {
     static ATR_INTERVAL_MS = parseInt(process.env.ATR_INTERVAL_MS || "0") || 5000;
     static ATR_TIMEOUT_MS = parseInt(process.env.ATR_TIMEOUT_MS || "0") || 1800000;
     static ATR_AUTO_ENABLE = (process.env.ATR_AUTO_ENABLE || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minOccur: x[0] || 0, maxOccur: x[1] || 0, minConf: x[2] || 0, supportReq: x[3] == 1})).filter(x => true);
+
+    static DC_MAX_LATEST_SIGNALS = parseInt(process.env.DC_MAX_LATEST_SIGNALS || "0") || 5;
+    static DC_MIN_DOM_PERC = parseFloat(process.env.DC_MIN_DOM_PERC || '0') || 51;
+    static DC_SELL = (process.env.DC_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ minDuration: x[0] || 0, maxDuration: x[1] || 0, minPnL: x[2] || 0})).filter(x => x.minDuration >= 0 && x.maxDuration >= x.minDuration);
 }
 
 module.exports = Site;

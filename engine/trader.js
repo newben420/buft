@@ -8,6 +8,7 @@ const Account = require("./account");
 const BitgetEngine = require("./bitget");
 const generateLowercaseAlphanumeric = require("../lib/unique_string");
 const DupSig = require("./dup_sig");
+const { computeArithmeticDirection } = require("../lib/direction");
 
 let SigSmooth = null;
 let BroadcastEngine = null;
@@ -628,6 +629,13 @@ class Trader {
                 order.least_ts = Date.now();
             }
 
+            if (order.recent_ROE.length > 0 ? (order.recent_ROE[order.recent_ROE.length - 1] != roi) : true) {
+                order.recent_ROE.push(roi);
+                if (order.recent_ROE.length > Site.DC_MAX_LATEST_SIGNALS) {
+                    order.recent_ROE = order.recent_ROE.slice(order.recent_ROE.length - Site.DC_MAX_LATEST_SIGNALS);
+                }
+            }
+
 
             // EXIT STRATEGY
             if (!BroadcastEngine) {
@@ -692,6 +700,22 @@ class Trader {
                             if ((drop >= p.minDrop) && (drop <= p.maxDrop) && ((order.roi - breakEvenROE) >= p.minPnL) && ((order.roi - breakEvenROE) <= p.maxPnL)) {
                                 exitAlready = true;
                                 order.close_reason = `Auto PeakDrop ${(i + 1)}`;
+                                Trader.closeOrder(symbol);
+                                break;
+                            }
+                        }
+                    }
+                    // DAMAGE CONTROL
+                    const dom = BroadcastEngine.getDominantSignal();
+                    const sig = order.side;
+                    const valid = dom != "no_signal" && dom != sig && computeArithmeticDirection(order.recent_ROE) < 1;
+                    if (valid && !exitAlready && BroadcastEngine.autoATR) {
+                        // means the dominant signal is the opposite of this trade
+                        for (let i = 0; i < Site.DC_SELL.length; i++) {
+                            let s = Site.DC_SELL[i];
+                            if(duration >= s.minDuration && duration <= s.maxDuration && order.roi >= s.minPnL){
+                                exitAlready = true;
+                                order.close_reason = `Damage Control ${s.minPnL}%`;
                                 Trader.closeOrder(symbol);
                                 break;
                             }

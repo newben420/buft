@@ -159,6 +159,31 @@ class BroadcastEngine {
     static #occ = {};
 
     /**
+     * @type {('long'|'short')[]}
+     */
+    static #recentSignals = [];
+
+    /**
+     * @returns {'no_signal'|'long'|'short'}
+     */
+    static getDominantSignal = () => {
+        if (BroadcastEngine.#recentSignals.length > 2) {
+            const longPerc = (BroadcastEngine.#recentSignals.filter(x => x == "long").length / BroadcastEngine.#recentSignals.length) * 100;
+            const shortPerc = (BroadcastEngine.#recentSignals.filter(x => x == "short").length / BroadcastEngine.#recentSignals.length) * 100;
+
+            if (longPerc >= Site.DC_MIN_DOM_PERC && shortPerc < Site.DC_MIN_DOM_PERC) {
+                return "long";
+            }
+
+            if (shortPerc >= Site.DC_MIN_DOM_PERC && longPerc < Site.DC_MIN_DOM_PERC) {
+                return "short";
+            }
+        }
+
+        return 'no_signal';
+    }
+
+    /**
      * @type {Record<string, SignalCache>}
      */
     static #sigCache = {};
@@ -200,6 +225,12 @@ class BroadcastEngine {
         }
         else {
             BroadcastEngine.#occ[ticker].update(signal.long);
+        }
+
+        // update recent signals
+        BroadcastEngine.#recentSignals.push(signal.long ? 'long' : 'short');
+        if (BroadcastEngine.#recentSignals.length > Site.DC_MAX_LATEST_SIGNALS) {
+            BroadcastEngine.#recentSignals = BroadcastEngine.#recentSignals.slice(BroadcastEngine.#recentSignals.length - Site.DC_MAX_LATEST_SIGNALS);
         }
 
         const occurence = BroadcastEngine.#occ[ticker].getCount();
@@ -298,17 +329,19 @@ class BroadcastEngine {
                 BroadcastEngine.#executingATR[`${symbol}_LONG`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_LONG`];
                 if (price >= atd.price && BroadcastEngine.autoATR) {
-                    // const signal = new Signal(false, true, "ATR Long", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
-                    const mark = atd.price / (1 + (atd.vol) / 100);
-                    const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
-                    const done = await Trader.openOrder(symbol, signal, false, true);
-                    if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                    const domSig = this.getDominantSignal();
+                    if (domSig == "no_signal" || domSig == atd.signal) {
+                        const mark = atd.price / (1 + (atd.vol) / 100);
+                        const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
+                        const done = await Trader.openOrder(symbol, signal, false, true);
+                        if (done) {
+                            TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                        }
+                        else {
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                        }
+                        delete BroadcastEngine.atr[`${symbol}_LONG`];
                     }
-                    else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
-                    }
-                    delete BroadcastEngine.atr[`${symbol}_LONG`];
                 }
                 delete BroadcastEngine.#executingATR[`${symbol}_LONG`];
             }
@@ -318,17 +351,19 @@ class BroadcastEngine {
                 BroadcastEngine.#executingATR[`${symbol}_SHORT`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
                 if (price <= atd.price && BroadcastEngine.autoATR) {
-                    // const signal = new Signal(true, false, "ATR Short", 0, Site.TR_MANUAL_STOPLOSS_PERC, 0);
-                    const mark = atd.price / (1 - (atd.vol) / 100);
-                    const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
-                    const done = await Trader.openOrder(symbol, signal, false, true);
-                    if (done) {
-                        TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                    const domSig = this.getDominantSignal();
+                    if (domSig == "no_signal" || domSig == atd.signal) {
+                        const mark = atd.price / (1 - (atd.vol) / 100);
+                        const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
+                        const done = await Trader.openOrder(symbol, signal, false, true);
+                        if (done) {
+                            TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                        }
+                        else {
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                        }
+                        delete BroadcastEngine.atr[`${symbol}_SHORT`];
                     }
-                    else {
-                        TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
-                    }
-                    delete BroadcastEngine.atr[`${symbol}_SHORT`];
                 }
                 delete BroadcastEngine.#executingATR[`${symbol}_SHORT`];
             }

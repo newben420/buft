@@ -10,6 +10,7 @@ const TickerEngine = require('./ticker');
 const Account = require('./account');
 const Signal = require('../model/signal');
 const BitgetEngine = require('./bitget');
+const { clearDirection, computeArithmeticDirection } = require('../lib/direction');
 
 let BroadcastEngine = null;
 
@@ -173,6 +174,12 @@ class TelegramEngine {
                 m += `Open Price 💰 ${order.open_price}\n`;
                 m += `Break Even Price 💰 ${FFF(order.breakeven_price)}\n`;
                 m += `Liquidation Price 💰 ${FFF(order.liquidation_price)}\n`;
+
+                if(order.recent_ROE.length >= 2){
+                    const d = computeArithmeticDirection(order.recent_ROE);
+                    const hd = d == 1 ? "Up" : d == -1 ? "Down" : "Neutral";
+                    m += `ROE Direction 💰 ${hd}\n`;
+                }
 
                 m += `\n`;
                 message += m;

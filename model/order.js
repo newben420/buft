@@ -61,6 +61,11 @@ class Order {
     least_ts;
 
     /**
+     * @type {number[]}
+     */
+    recent_ROE;
+
+    /**
      * @type {number}
      */
     liquidation_price;
@@ -149,6 +154,7 @@ class Order {
         this.open_price = 0;
         this.close_time = 0;
         this.close_price = 0;
+        this.recent_ROE = [];
         this.gross_profit = 0;
         this.net_profit = 0;
         this.roi = 0;
