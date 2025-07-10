@@ -111,6 +111,19 @@ class TelegramEngine {
                 }
             ]);
         }
+
+        inline.push([
+            {
+                text: `${BroadcastEngine.long ? `🔴 Disable` : `🟢 Enable`} ATR Long`,
+                callback_data: `bbb_long_${BroadcastEngine.long ? 'false' : 'true'}`,
+            },
+        ],
+        [
+            {
+                text: `${BroadcastEngine.short ? `🔴 Disable` : `🟢 Enable`} ATR Short`,
+                callback_data: `bbb_short_${BroadcastEngine.short ? 'false' : 'true'}`,
+            },
+        ]);
         return { message, inline };
     }
 
@@ -551,6 +564,38 @@ class TelegramEngine {
                             let temp1 = content.split(" ");
                             let newStatus = temp1[1] == "true";
                             BroadcastEngine.autoATR = newStatus;
+                            try {
+                                TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
+                                const { message, inline } = TelegramEngine.#getStatsContent();
+                                const done = await TelegramEngine.#bot.editMessageText(TelegramEngine.sanitizeMessage(message), {
+                                    chat_id: Site.TG_CHAT_ID,
+                                    message_id: callbackQuery.message.message_id,
+                                    parse_mode: "MarkdownV2",
+                                    disable_web_page_preview: true,
+                                    reply_markup: {
+                                        inline_keyboard: inline
+                                    }
+                                });
+                                if (done) {
+                                    TelegramEngine.#lastStatContent = message;
+                                }
+                            } catch (error) {
+                                Log.dev(error);
+                            }
+                        }
+                        else if (content.startsWith("bbb ")) {
+                            if (!BroadcastEngine) {
+                                BroadcastEngine = require("./broadcast");
+                            }
+                            let temp = content.split(" ");
+                            let attr = temp[1].toLowerCase();
+                            let newStatus = temp[2] == "true";
+                            if(attr == "long"){
+                                BroadcastEngine.long = newStatus;
+                            }
+                            if(attr == "short"){
+                                BroadcastEngine.short = newStatus;
+                            }
                             try {
                                 TelegramEngine.#bot.answerCallbackQuery(callbackQuery.id);
                                 const { message, inline } = TelegramEngine.#getStatsContent();

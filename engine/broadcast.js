@@ -22,10 +22,24 @@ class Occurrence {
     signal;
 
     /**
-     * The number of times the current signal has occurred.\
+     * The number of times the current signal has occurred.\=
      * @type {number}
      */
     count;
+
+    /**
+     * The timestamp since when the current signal was first recorded.
+     * @type {number}
+     */
+    timeSinceFirst;
+
+    /**
+     * Get timestamp since when the current signal was first recorded.
+     * @returns {number}
+     */
+    getFirstTime(){
+        return this.timeSinceFirst;
+    }
 
     /**
      * Updates count and signal.
@@ -42,6 +56,7 @@ class Occurrence {
         else {
             this.signal = newSignal;
             this.count = 1;
+            this.timeSinceFirst = Date.now();
         }
     }
 
@@ -60,6 +75,7 @@ class Occurrence {
     constructor(isLong) {
         this.signal = isLong ? "long" : "short";
         this.count = 1;
+        this.timeSinceFirst = Date.now();
     }
 }
 
@@ -159,6 +175,18 @@ class BroadcastEngine {
     static #occ = {};
 
     /**
+     * Long signals are only executed if true.
+     * @type {boolean}
+     */
+    static long = true;
+
+    /**
+     * Short signals are only executed if true.
+     * @type {boolean}
+     */
+    static short = true;
+
+    /**
      * @type {('long'|'short')[]}
      */
     static #recentSignals = [];
@@ -234,6 +262,7 @@ class BroadcastEngine {
         }
 
         const occurence = BroadcastEngine.#occ[ticker].getCount();
+        const occFirstTime = BroadcastEngine.#occ[ticker].getFirstTime();
         let m = `📣 *Signal Broadcast*\n\n`;
         m += `Ticker 💲 ${ticker}\n`;
         m += `Type 👉 ${signal.long ? "Long" : "Short"}\n`;
@@ -241,7 +270,7 @@ class BroadcastEngine {
         m += `Mark Price 🏷️ ${FFF(signal.markPrice, 6)}\n`;
         m += `Stop Loss Price 🏷️ ${FFF(signal.tpsl, 6)}\n`;
         m += `Volatility 📈 ${FFF(signal.volatilityPerc)}%\n`;
-        m += `Occurrence 🔄 ${formatNumber(occurence)}`;
+        m += `Occurrence 🔄 ${formatNumber(occurence)} \\(${getTimeElapsed(occFirstTime, Date.now())} ago\\)`;
 
         const verdict = await BroadcastEngine.#computePrompt(ticker, signal, rawPrompt, occurence);
 
@@ -330,7 +359,7 @@ class BroadcastEngine {
                 const atd = BroadcastEngine.atr[`${symbol}_LONG`];
                 if (price >= atd.price && BroadcastEngine.autoATR) {
                     const domSig = this.getDominantSignal();
-                    if (domSig == "no_signal" || domSig == atd.signal) {
+                    if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.long) {
                         const mark = atd.price / (1 + (atd.vol) / 100);
                         const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
@@ -352,7 +381,7 @@ class BroadcastEngine {
                 const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
                 if (price <= atd.price && BroadcastEngine.autoATR) {
                     const domSig = this.getDominantSignal();
-                    if (domSig == "no_signal" || domSig == atd.signal) {
+                    if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.short) {
                         const mark = atd.price / (1 - (atd.vol) / 100);
                         const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
