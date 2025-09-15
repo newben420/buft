@@ -1,6 +1,19 @@
 const { config } = require("dotenv");
 const reverseGranularity = require("./lib/reverse_granularity");
 const args = process.argv.slice(2);
+
+class Indicator {
+    /**
+     * @type {string}
+     */
+    name;
+
+    /**
+     * @type {string}
+     */
+    granularity;
+}
+
 config({
     path: args[0] || ".env"
 });
@@ -24,9 +37,13 @@ class Site {
     static TK_MARGIN_COIN = process.env.TK_MARGIN_COIN || "USDT";
     static TK_AUTO_SYMBOLS = (process.env.TK_AUTO_SYMBOLS || "").split(" ").filter(x => x.length > 0);
     static TK_MAX = parseInt(process.env.TK_MAX || "100");
-    static TK_GRANULARITY = process.env.TK_GRANULARITY || "1m";
-    static TK_INTERVAL = reverseGranularity(Site.TK_GRANULARITY) || 300000;
+    static TK_GRANULARITY_DEF = process.env.TK_GRANULARITY_DEF || "1m";
+    static TK_GRANULARITIES = (process.env.TK_GRANULARITIES || "1m").split(" ").filter(x => x.length > 0);
+    static TK_INTERVAL_DEF = reverseGranularity(Site.TK_GRANULARITY_DEF) || 300000;
+    static TK_INTERVALS = Site.TK_GRANULARITIES.map(x => (reverseGranularity(x) || 0)).filter(x => x > 0).sort((a, b) => a - b);
+    static TK_GRAN_RATIOS = Site.TK_INTERVALS.map(x => x / Site.TK_INTERVALS[0]);
     static TK_MAX_ROWS = parseInt(process.env.TK_MAX_ROWS || "100");
+    static TK_COMPUTED_MAX_ROWS = (Site.TK_GRAN_RATIOS.slice(-1)[0]) * Site.TK_MAX_ROWS;
     static TK_LEVERAGE_LONG = process.env.TK_LEVERAGE_LONG || "5";
     static TK_LEVERAGE_SHORT = process.env.TK_LEVERAGE_SHORT || "5";
     static TK_LEVERAGE_CROSS = process.env.TK_LEVERAGE_CROSS || "5";
@@ -34,19 +51,57 @@ class Site {
     static IN_CFG = Object.fromEntries((process.env.IN_CFG || "").replace(/[\n\r]/g, " ").split(" ").filter(x => x.length > 0).reduce((acc, val, i, arr) => i % 2 === 0 ? acc : acc.concat([[arr[i - 1], /^true$/i.test(val) ? true : /^false$/i.test(val) ? false : isNaN(val) ? val : val.includes(".") ? parseFloat(val) : parseInt(val)]]), []));
     static IN_ML_DATA_PATH = (path.join(rootDir(), `analysis/ml_${Site.IN_CFG.ML_DATA_PATH || "default"}.json`));
 
-    static STR_ENTRY_IND = process.env.STR_ENTRY_IND || "ICH";
-    static STR_TREND_IND = (process.env.STR_TREND_IND || "BLL").split(" ").filter(x => x.length == 3);
+    /**
+     * @type {Indicator}
+     */
+    static STR_ENTRY_IND = {
+        name: (process.env.STR_ENTRY_IND || "ICH").split("_").filter(x =>x.length > 0)[0],
+        granularity: (process.env.STR_ENTRY_IND || "ICH").split("_").filter(x =>x.length > 0)[1] || Site.TK_GRANULARITY_DEF,
+    };
+    /**
+     * @type {Indicator[]}
+     */
+    static STR_TREND_IND = (process.env.STR_TREND_IND || "BLL").split(" ").filter(x => x.length >= 3).map(x => x.split("_").filter(y => y.length > 0)).map(x => ({
+        name: x[0],
+        granularity: x[1] || Site.TK_GRANULARITY_DEF,
+    }));
     static STR_TREND_CV = parseFloat(process.env.STR_TREND_CV || "0") || 0;
     static STR_TREND_FV = parseFloat(process.env.STR_TREND_FV || "0") || 0;
+    static STR_STG_IND_GRAN = process.env.STR_STG_IND_GRAN || Site.TK_GRANULARITY_DEF;
     static STR_STG_FV = parseFloat(process.env.STR_STG_FV || "0") || 0;
-    static STR_OB_IND = (process.env.STR_OB_IND || "STC").split(" ").filter(x => x.length == 3);
+    /**
+     * @type {Indicator[]}
+     */
+    static STR_OB_IND = (process.env.STR_OB_IND || "STC").split(" ").filter(x => x.length >= 3).map(x => x.split("_").filter(y => y.length > 0)).map(x => ({
+        name: x[0],
+        granularity: x[1] || Site.TK_GRANULARITY_DEF,
+    }));
     static STR_OB_CV = parseFloat(process.env.STR_OB_CV || "0") || 0;
     static STR_OB_FV = parseFloat(process.env.STR_OB_FV || "0") || 0;
-    static STR_REV_IND_BULL = (process.env.STR_REV_IND_BULL || "STR HGM EST TBC PIL DCC TTP").split(" ").filter(x => x.length == 3);
-    static STR_REV_IND_BEAR = (process.env.STR_REV_IND_BEAR || "TWS MST HMR TBT").split(" ").filter(x => x.length == 3);
+    /**
+     * @type {Indicator[]}
+     */
+    static STR_REV_IND_BULL = (process.env.STR_REV_IND_BULL || "STR HGM EST TBC PIL DCC TTP").split(" ").filter(x => x.length >= 3).map(x => x.split("_").filter(y => y.length > 0)).map(x => ({
+        name: x[0],
+        granularity: x[1] || Site.TK_GRANULARITY_DEF,
+    }));
+    /**
+     * @type {Indicator[]}
+     */
+    static STR_REV_IND_BEAR = (process.env.STR_REV_IND_BEAR || "TWS MST HMR TBT").split(" ").filter(x => x.length >= 3).map(x => x.split("_").filter(y => y.length > 0)).map(x => ({
+        name: x[0],
+        granularity: x[1] || Site.TK_GRANULARITY_DEF,
+    }));
     static STR_REV_CV = parseFloat(process.env.STR_REV_CV || "0") || 0;
     static STR_REV_FV = parseFloat(process.env.STR_REV_FV || "0") || 0;
-    static STR_TSL_IND = process.env.STR_TSL_IND || "PSR";
+    /**
+     * @type {Indicator}
+     */
+    static STR_TSL_IND = {
+        name: (process.env.STR_TSL_IND || "PSR").split("_").filter(x =>x.length > 0)[0],
+        granularity: (process.env.STR_TSL_IND || "PSR").split("_").filter(x =>x.length > 0)[1] || Site.TK_GRANULARITY_DEF,
+    };
+    static STR_VOL_IND_GRAN = process.env.STR_VOL_IND_GRAN || Site.TK_GRANULARITY_DEF;
     static STR_VOL_RNG = (process.env.STR_VOL_RNG || "0 0").split(" ").filter(x => x.length > 0).map(x => parseFloat(x)).filter(x => (!Number.isNaN(x)));
 
     static CL_SYMBOLS = (process.env.CL_SYMBOLS || "").split(" ").filter(x => x.length > 0);
@@ -65,9 +120,9 @@ class Site {
     static TR_MANUAL_TAKEPROFIT_PERC = parseFloat(process.env.TR_MANUAL_TAKEPROFIT_PERC || "0") || 0;
     static TR_AUTOMATIC_TP_SL_MULTIPLIER = parseFloat(process.env.TR_AUTOMATIC_TP_SL_MULTIPLIER || "0") || 0;
     static TR_RECOVERY_DEFULT_SL_PERC = parseFloat(process.env.TR_RECOVERY_DEFULT_SL_PERC || "0") || 100;
-    static TR_AUTO_SELL = (process.env.TR_AUTO_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ pnl: x[0] || 0, minDurationMS: x[1] || 0, maxDurationMS: x[2] || Infinity})).filter(x => x.pnl != 0 && x.minDurationMS > 0 && x.maxDurationMS > 0 && x.maxDurationMS >= x.minDurationMS);
-    static TR_PEAK_DROP = (process.env.TR_PEAK_DROP || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity})).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
-    static TR_PEAK_DROP_MANUAL = (process.env.TR_PEAK_DROP_MANUAL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity})).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
+    static TR_AUTO_SELL = (process.env.TR_AUTO_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ pnl: x[0] || 0, minDurationMS: x[1] || 0, maxDurationMS: x[2] || Infinity })).filter(x => x.pnl != 0 && x.minDurationMS > 0 && x.maxDurationMS > 0 && x.maxDurationMS >= x.minDurationMS);
+    static TR_PEAK_DROP = (process.env.TR_PEAK_DROP || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity })).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
+    static TR_PEAK_DROP_MANUAL = (process.env.TR_PEAK_DROP_MANUAL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minDrop: x[0] || 0, maxDrop: x[1] || Infinity, minPnL: x[2] || 0, maxPnL: x[3] || Infinity })).filter(x => x.maxPnL >= x.minPnL && x.maxDrop >= x.minDrop);
     static TR_TEMP_ORDERS_MAX_DURATION_MS = parseFloat(process.env.TR_TEMP_ORDERS_MAX_DURATION_MS || "0") || 600000;
 
     static FI_SAVE_PATH = process.env.FI_SAVE_PATH || "";
@@ -104,11 +159,11 @@ class Site {
 
     static ATR_INTERVAL_MS = parseInt(process.env.ATR_INTERVAL_MS || "0") || 5000;
     static ATR_TIMEOUT_MS = parseInt(process.env.ATR_TIMEOUT_MS || "0") || 1800000;
-    static ATR_AUTO_ENABLE = (process.env.ATR_AUTO_ENABLE || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minOccur: x[0] || 0, maxOccur: x[1] || 0, minConf: x[2] || 0, supportReq: x[3] == 1})).filter(x => true);
+    static ATR_AUTO_ENABLE = (process.env.ATR_AUTO_ENABLE || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minOccur: x[0] || 0, maxOccur: x[1] || 0, minConf: x[2] || 0, supportReq: x[3] == 1 })).filter(x => true);
 
     static DC_MAX_LATEST_SIGNALS = parseInt(process.env.DC_MAX_LATEST_SIGNALS || "0") || 5;
     static DC_MIN_DOM_PERC = parseFloat(process.env.DC_MIN_DOM_PERC || '0') || 51;
-    static DC_SELL = (process.env.DC_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ minDuration: x[0] || 0, maxDuration: x[1] || 0, minPnL: x[2] || 0})).filter(x => x.minDuration >= 0 && x.maxDuration >= x.minDuration);
+    static DC_SELL = (process.env.DC_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ minDuration: x[0] || 0, maxDuration: x[1] || 0, minPnL: x[2] || 0 })).filter(x => x.minDuration >= 0 && x.maxDuration >= x.minDuration);
 }
 
 module.exports = Site;

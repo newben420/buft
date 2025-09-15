@@ -37,7 +37,7 @@ class Occurrence {
      * Get timestamp since when the current signal was first recorded.
      * @returns {number}
      */
-    getFirstTime(){
+    getFirstTime() {
         return this.timeSinceFirst;
     }
 
@@ -244,7 +244,6 @@ class BroadcastEngine {
      */
     static entry = async (ticker, signal, rawPrompt) => {
 
-        // console.log(rawPrompt);
         if (!TelegramEngine) {
             TelegramEngine = require("./telegram");
         }
@@ -278,62 +277,64 @@ class BroadcastEngine {
             m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict.str}\`\`\``;
         }
 
-        const ATRID = `${ticker}_${signal.long ? "LONG" : "SHORT"}`;
-        const ATRPF = ((signal.volatilityPerc || 0) / 100) * (signal.markPrice || 0);
-        const ATRP = signal.long ? ((signal.markPrice || 0) + ATRPF) : ((signal.markPrice || 0) - ATRPF);
-        let verd = verdict ? verdict.obj : { confidence: 0, reason: '', supported: false };
-        if (BroadcastEngine.#sigCache[ATRID]) {
-            delete BroadcastEngine.#sigCache[ATRID];
-        }
-        BroadcastEngine.#sigCache[ATRID] = new SignalCache(ATRP, signal.tpsl, signal.volatilityPerc, signal.markPrice);
-        if (BroadcastEngine.autoATR) {
-            let autoEnabled = false;
-            for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
-                let cond = Site.ATR_AUTO_ENABLE[i];
-                if (occurence <= cond.maxOccur && occurence >= cond.minOccur && verd.confidence >= cond.minConf && (cond.supportReq ? verd.supported : true)) {
-                    autoEnabled = true;
-                    break;
+        if (!process.env.COLLER) {
+            const ATRID = `${ticker}_${signal.long ? "LONG" : "SHORT"}`;
+            const ATRPF = ((signal.volatilityPerc || 0) / 100) * (signal.markPrice || 0);
+            const ATRP = signal.long ? ((signal.markPrice || 0) + ATRPF) : ((signal.markPrice || 0) - ATRPF);
+            let verd = verdict ? verdict.obj : { confidence: 0, reason: '', supported: false };
+            if (BroadcastEngine.#sigCache[ATRID]) {
+                delete BroadcastEngine.#sigCache[ATRID];
+            }
+            BroadcastEngine.#sigCache[ATRID] = new SignalCache(ATRP, signal.tpsl, signal.volatilityPerc, signal.markPrice);
+            if (BroadcastEngine.autoATR) {
+                let autoEnabled = false;
+                for (let i = 0; i < Site.ATR_AUTO_ENABLE.length; i++) {
+                    let cond = Site.ATR_AUTO_ENABLE[i];
+                    if (occurence <= cond.maxOccur && occurence >= cond.minOccur && verd.confidence >= cond.minConf && (cond.supportReq ? verd.supported : true)) {
+                        autoEnabled = true;
+                        break;
+                    }
+                }
+                if (autoEnabled) {
+                    if (BroadcastEngine.atr[ATRID]) {
+                        delete BroadcastEngine.atr[ATRID];
+                    }
+                    BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short");
                 }
             }
-            if (autoEnabled) {
-                if (BroadcastEngine.atr[ATRID]) {
-                    delete BroadcastEngine.atr[ATRID];
-                }
-                BroadcastEngine.manageATR(true, ticker, signal.long ? "long" : "short");
-            }
-        }
-        const isReg = BroadcastEngine.atr[ATRID] ? true : false;
+            const isReg = BroadcastEngine.atr[ATRID] ? true : false;
 
-        /**
-         * @type {TelegramBot.InlineKeyboardButton[][]}
-         */
-        let inline = [
-            [
-                {
-                    text: `Create Order`,
-                    callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
-                },
-                {
-                    text: `Mark Price`,
-                    callback_data: `price_${ticker}`,
-                }
-            ],
-            [
-                {
-                    text: `${isReg ? 'Dea' : 'A'}ctivate ATR Buy`,
-                    callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}`,
-                },
-            ],
-        ];
+            /**
+             * @type {TelegramBot.InlineKeyboardButton[][]}
+             */
+            let inline = [
+                [
+                    {
+                        text: `Create Order`,
+                        callback_data: `${signal.long ? 'long' : 'short'}_${ticker}`,
+                    },
+                    {
+                        text: `Mark Price`,
+                        callback_data: `price_${ticker}`,
+                    }
+                ],
+                [
+                    {
+                        text: `${isReg ? 'Dea' : 'A'}ctivate ATR Buy`,
+                        callback_data: `ATR_${isReg ? "false" : "true"}_${ATRID}`,
+                    },
+                ],
+            ];
 
-        TelegramEngine.sendMessage(m, mid => {
-        }, {
-            parse_mode: "MarkdownV2",
-            disable_web_page_preview: true,
-            reply_markup: {
-                inline_keyboard: inline,
-            }
-        });
+            TelegramEngine.sendMessage(m, mid => {
+            }, {
+                parse_mode: "MarkdownV2",
+                disable_web_page_preview: true,
+                reply_markup: {
+                    inline_keyboard: inline,
+                }
+            });
+        }
     }
 
     /**
@@ -580,39 +581,44 @@ class BroadcastEngine {
             prompt[0].content = prompt[0].content.replace(/ {2,}/g, " ");
             prompt[1].content = prompt[1].content.replace(/ {2,}/g, " ");
 
-            if (process.env.COLLER) console.log(prompt);
+            if (process.env.COLLER) {
+                console.log(prompt);
+                resolve(null);
+            }
 
-            GroqEngine.request({
-                messages: prompt,
-                callback(r) {
-                    if (r.succ) {
-                        try {
-                            r.message = r.message.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
-                            const { supported, reason, confidence } = JSON.parse(r.message);
-                            const row = { ts: Date.now(), supported: supported, confidence: confidence, long: signal.long, price: signal.markPrice };
+            else {
+                GroqEngine.request({
+                    messages: prompt,
+                    callback(r) {
+                        if (r.succ) {
+                            try {
+                                r.message = r.message.replace(/^[^{]*/, "").replace(/[^}]*$/, "");
+                                const { supported, reason, confidence } = JSON.parse(r.message);
+                                const row = { ts: Date.now(), supported: supported, confidence: confidence, long: signal.long, price: signal.markPrice };
 
-                            BroadcastEngine.#aiHistory[ticker].push(row);
-                            if (BroadcastEngine.#aiHistory[ticker].length > Site.GROQ_MAX_HISTORY_COUNT) {
-                                BroadcastEngine.#aiHistory[ticker] = BroadcastEngine.#aiHistory[ticker].slice(BroadcastEngine.#aiHistory[ticker].length - Site.GROQ_MAX_HISTORY_COUNT);
-                            }
-                            resolve({
-                                str: `Supported: ${supported ? 'Yes' : 'No'}\nReason: ${reason}\nConfidence: ${confidence}`,
-                                obj: {
-                                    confidence: confidence,
-                                    reason: reason,
-                                    supported: supported,
+                                BroadcastEngine.#aiHistory[ticker].push(row);
+                                if (BroadcastEngine.#aiHistory[ticker].length > Site.GROQ_MAX_HISTORY_COUNT) {
+                                    BroadcastEngine.#aiHistory[ticker] = BroadcastEngine.#aiHistory[ticker].slice(BroadcastEngine.#aiHistory[ticker].length - Site.GROQ_MAX_HISTORY_COUNT);
                                 }
-                            });
-                        } catch (error) {
-                            Log.dev(error);
+                                resolve({
+                                    str: `Supported: ${supported ? 'Yes' : 'No'}\nReason: ${reason}\nConfidence: ${confidence}`,
+                                    obj: {
+                                        confidence: confidence,
+                                        reason: reason,
+                                        supported: supported,
+                                    }
+                                });
+                            } catch (error) {
+                                Log.dev(error);
+                                resolve(null);
+                            }
+                        }
+                        else {
                             resolve(null);
                         }
-                    }
-                    else {
-                        resolve(null);
-                    }
-                },
-            });
+                    },
+                });
+            }
         });
     }
 }

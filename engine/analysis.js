@@ -42,6 +42,43 @@ const formatNumber = require("../lib/format_number");
 const getTimeElapsed = require("../lib/get_time_elapsed");
 const getDateTime2 = require("../lib/get_date_time_2");
 
+class DataX {
+    /**
+     * @type {number[]}
+     */
+    open;
+
+    /**
+     * @type {number[]}
+     */
+    high;
+
+    /**
+     * @type {number[]}
+     */
+    low;
+
+    /**
+     * @type {number[]}
+     */
+    close;
+
+    /**
+     * @type {number[]}
+     */
+    volume;
+
+    /**
+     * @type {number[]}
+     */
+    timestamp;
+
+    /**
+     * @type {number}
+     */
+    latestRate;
+}
+
 let TelegramEngine = null;
 
 /**
@@ -198,24 +235,45 @@ class Analysis {
     /**
      * Runs analysis on candlestic kdata
      * @param {string} symbol 
-     * @param {Candlestick[]} data 
+     * @param {(gran?: string) => Candlestick[]} dataFn 
      * @returns {Promise<Signal|null>}
      */
-    static run = (symbol, data) => {
+    static run = (symbol, dataFn) => {
         return new Promise((resolve, reject) => {
             Log.flow(`Analysis > ${symbol} > Initialized.`, 5);
-            if (data.length >= (Site.IN_CFG.MN_DATA_LEN || 10)) {
+            if (dataFn().length >= (Site.IN_CFG.MN_DATA_LEN || 10)) {
                 let ts = Date.now();
                 if (ts == Analysis.#lastTS) {
                     ts = ts + 1;
                 }
                 Analysis.#lastTS = ts;
-                const open = data.map(x => x.open);
-                const high = data.map(x => x.high);
-                const low = data.map(x => x.low);
-                const close = data.map(x => x.close);
-                const volume = data.map(x => x.volume);
-                const latestRate = close[close.length - 1] || 0;
+
+                /**
+                 * @type {Record<string, DataX>}
+                 */
+                const dataCache = {};
+
+                /**
+                 * @param {string} gran
+                 * @returns {DataX} 
+                 */
+                const getData = (gran = Site.TK_GRANULARITY_DEF) => {
+                    if (!dataCache[gran]) {
+                        const data = dataFn(gran);
+                        dataCache[gran] = {
+                            open: data.map(x => x.open),
+                            high: data.map(x => x.high),
+                            low: data.map(x => x.low),
+                            close: data.map(x => x.close),
+                            volume: data.map(x => x.volume),
+                            timestamp: data.map(x => x.ts),
+                            latestRate: data.slice(-1)[0].close,
+                        }
+                    }
+                    return dataCache[gran];
+                }
+
+                const { open, high, low, close, volume, timestamp, latestRate } = getData(Site.TK_GRANULARITIES[0]);
                 const csd = { open, close, high, low };
 
                 /**
@@ -224,7 +282,6 @@ class Analysis {
                 let userPrompt = [
                     [
                         `Ticker: ${symbol}`,
-                        `Data: ${data.length}x${Site.TK_GRANULARITY} (${getDateTime2(Date.now() - (Site.TK_INTERVAL * data.length))} → ${getDateTime2(Date.now())})`,
                         `Price: ${latestRate}`,
                     ], // INPUT DATA
                     [], // STEP 1
@@ -239,105 +296,117 @@ class Analysis {
                 let currentStep = 0;
 
                 let cache = {
-                    PSR: null,
-                    PSR_BULL: null,
-                    PSR_BEAR: null,
-                    PSR_SL: null,
-                    MCD: null,
-                    MCD_BULL: null,
-                    MCD_BEAR: null,
-                    ICH: null,
-                    ICH_BULL: null,
-                    ICH_BEAR: null,
-                    ICH_SL: null,
-                    BLL_BULL: null,
-                    BLL_BEAR: null,
-                    BLL_BEAR: null,
-                    KST_BULL: null,
-                    KST_BEAR: null,
-                    SMA_BULL: null,
-                    SMA_BEAR: null,
-                    EMA_BULL: null,
-                    EMA_BEAR: null,
-                    WMA_BULL: null,
-                    WMA_BEAR: null,
-                    VWP_BULL: null,
-                    VWP_BEAR: null,
-                    AOS_BULL: null,
-                    AOS_BEAR: null,
-                    TRX_BULL: null,
-                    TRX_BEAR: null,
-                    STRONG: null,
-                    STC_OB: null,
-                    STC_OS: null,
-                    RSI_OB: null,
-                    RSI_OS: null,
-                    CCI_OB: null,
-                    CCI_OS: null,
-                    MFI_OB: null,
-                    MFI_OS: null,
-                    BBS_OB: null,
-                    BBS_OS: null,
-                    SRS_OB: null,
-                    SRS_OS: null,
-                    SRS_BULL: null,
-                    SRS_BEAR: null,
-                    STR: null,
-                    HGM: null,
-                    BAR: null,
-                    EST: null,
-                    TBC: null,
-                    PIL: null,
-                    DCC: null,
-                    TTP: null,
-                    TWS: null,
-                    MST: null,
-                    HMR: null,
-                    TBT: null,
-                    ABB: null,
-                    BEP: null,
-                    EDS: null,
-                    GSD: null,
-                    BRH: null,
-                    BRM: null,
-                    BHC: null,
-                    BLE: null,
-                    MDS: null,
-                    DFD: null,
-                    BLH: null,
-                    BLM: null,
-                    BLC: null,
-                    ATR: null,
-                    ENTRY: null,
+                    PSR: {},
+                    PSR_BULL: {},
+                    PSR_BEAR: {},
+                    PSR_SL: {},
+                    MCD: {},
+                    MCD_BULL: {},
+                    MCD_BEAR: {},
+                    ICH: {},
+                    ICH_BULL: {},
+                    ICH_BEAR: {},
+                    ICH_SL: {},
+                    BLL_BULL: {},
+                    BLL_BEAR: {},
+                    BLL_BEAR: {},
+                    KST_BULL: {},
+                    KST_BEAR: {},
+                    SMA_BULL: {},
+                    SMA_BEAR: {},
+                    EMA_BULL: {},
+                    EMA_BEAR: {},
+                    WMA_BULL: {},
+                    WMA_BEAR: {},
+                    VWP_BULL: {},
+                    VWP_BEAR: {},
+                    AOS_BULL: {},
+                    AOS_BEAR: {},
+                    TRX_BULL: {},
+                    TRX_BEAR: {},
+                    STRONG: {},
+                    STC_OB: {},
+                    STC_OS: {},
+                    RSI_OB: {},
+                    RSI_OS: {},
+                    CCI_OB: {},
+                    CCI_OS: {},
+                    MFI_OB: {},
+                    MFI_OS: {},
+                    BBS_OB: {},
+                    BBS_OS: {},
+                    SRS_OB: {},
+                    SRS_OS: {},
+                    SRS_BULL: {},
+                    SRS_BEAR: {},
+                    STR: {},
+                    HGM: {},
+                    BAR: {},
+                    EST: {},
+                    TBC: {},
+                    PIL: {},
+                    DCC: {},
+                    TTP: {},
+                    TWS: {},
+                    MST: {},
+                    HMR: {},
+                    TBT: {},
+                    ABB: {},
+                    BEP: {},
+                    EDS: {},
+                    GSD: {},
+                    BRH: {},
+                    BRM: {},
+                    BHC: {},
+                    BLE: {},
+                    MDS: {},
+                    DFD: {},
+                    BLH: {},
+                    BLM: {},
+                    BLC: {},
+                    ATR: {},
+                    ENTRY: {},
                 };
 
                 const ensureInd = {
-                    PSR: () => {
-                        if (!cache.PSR) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    PSR: (gran) => {
+                        if (!cache.PSR[gran]) {
+                            const { high, low, latestRate } = getData(gran);
                             const psar = PSAR.calculate({ high, low, step: Site.IN_CFG.PSR_ST ?? 0.02, max: Site.IN_CFG.PSR_MX ?? 0.2 });
                             const psarBull = (psar[psar.length - 1] ?? latestRate) < latestRate;
                             const psarBear = (psar[psar.length - 1] ?? latestRate) > latestRate;
                             const sl = psar[psar.length - 1] || 0;
-                            cache.PSR = true;
-                            cache.PSR_BULL = psarBull;
-                            cache.PSR_BEAR = psarBear;
-                            cache.PSR_SL = sl;
+                            cache.PSR[gran] = true;
+                            cache.PSR_BULL[gran] = psarBull;
+                            cache.PSR_BEAR[gran] = psarBear;
+                            cache.PSR_SL[gran] = sl;
                         }
-                        if (cache.PSR_BULL || cache.PSR_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.PSR_SL} (PSAR)`: ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
+                        if (cache.PSR_BULL[gran] || cache.PSR_BEAR[gran]) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.PSR_SL[gran]} (PSAR ${gran})` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND.name != Site.STR_ENTRY_IND.name)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
                     },
-                    MCD: () => {
-                        if (!cache.MCD) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    MCD: (gran) => {
+                        if (!cache.MCD[gran]) {
+                            const { close } = getData(gran);
                             const macd = MACD.calculate({ values: close, fastPeriod: Site.IN_CFG.MCD_FSP ?? 12, slowPeriod: Site.IN_CFG.MCD_SLP ?? 26, signalPeriod: Site.IN_CFG.MCD_SGP ?? 9, SimpleMAOscillator: false, SimpleMASignal: false });
                             const macdBull = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD > macd[macd.length - 1].signal : false) : false;
                             const macdBear = macd.length > 0 ? (((macd[macd.length - 1].MACD || macd[macd.length - 1].MACD === 0) && (macd[macd.length - 1].signal || macd[macd.length - 1].signal === 0)) ? macd[macd.length - 1].MACD < macd[macd.length - 1].signal : false) : false;
-                            cache.MCD = true;
-                            cache.MCD_BULL = macdBull;
-                            cache.MCD_BEAR = macdBear;
+                            cache.MCD[gran] = true;
+                            cache.MCD_BULL[gran] = macdBull;
+                            cache.MCD_BEAR[gran] = macdBear;
                         }
-                        if (cache.MCD_BULL || cache.MCD_BEAR) userPrompt[currentStep].push(`${currentStep == 2 ? `MACD: ${cache.MCD_BULL ? 'Bullish' : cache.MCD_BEAR ? 'Bearish' : 'No Trend'}` : ''} ${(currentStep == 1 || (currentStep == 2 && (!Site.STR_TREND_IND.includes(Site.STR_ENTRY_IND)))) ? `${Analysis.#getParamsForInd('MCD_').replace("FSP", "fast period").replace("SLP", "slow period").replace("SGP", "signal period") || "default"}` : ''}`);
+                        if (cache.MCD_BULL[gran] || cache.MCD_BEAR[gran]) userPrompt[currentStep].push(`${currentStep == 2 ? `MACD ${gran}: ${cache.MCD_BULL[gran] ? 'Bullish' : cache.MCD_BEAR[gran] ? 'Bearish' : 'No Trend'}` : ''} ${(currentStep == 1 || (currentStep == 2 && (!Site.STR_TREND_IND.map(x => x.name).includes(Site.STR_ENTRY_IND.name)))) ? `${Analysis.#getParamsForInd('MCD_').replace("FSP", "fast period").replace("SLP", "slow period").replace("SGP", "signal period") || "default"}` : ''}`);
                     },
-                    SRS: () => {
-                        if (cache.SRS_OB === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    SRS: (gran) => {
+                        if (cache.SRS_OB[gran] === null || cache.SRS_OB[gran] === undefined) {
+                            const { close } = getData(gran);
                             const srsi = StochasticRSI.calculate({
                                 dPeriod: Site.IN_CFG.STC_SP ?? 3,
                                 kPeriod: Site.IN_CFG.STC_SP ?? 3,
@@ -351,15 +420,19 @@ class Analysis {
                             const OS = (((srsi[srsi.length - 1] || {}).stochRSI || 100) < 20) &&
                                 (((srsi[srsi.length - 1] || {}).d || 100) < 20) &&
                                 (((srsi[srsi.length - 1] || {}).k || 100) < 20);
-                            cache.SRS_OB = OB;
-                            cache.SRS_OS = OS;
-                            cache.SRS_BULL = !OS;
-                            cache.SRS_BEAR = !OB;
+                            cache.SRS_OB[gran] = OB;
+                            cache.SRS_OS[gran] = OS;
+                            cache.SRS_BULL[gran] = !OS;
+                            cache.SRS_BEAR[gran] = !OB;
                         }
-                        if ((cache.ENTRY === true && cache.SRS_OB) || (cache.ENTRY === false && cache.SRS_OS)) userPrompt[currentStep].push(`STOCH RSI ${(Analysis.#getParamsForInd('STC_').replace("SP", "stoch signal period").replace("P", "stoch period").replace(")", "") + '/' + Analysis.#getParamsForInd('RSI_').replace("P", "rsi period").replace("(", "")) || "default"}`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true && cache.SRS_OB[gran]) || (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false && cache.SRS_OS[gran])) userPrompt[currentStep].push(`STOCH RSI ${gran} ${(Analysis.#getParamsForInd('STC_').replace("SP", "stoch signal period").replace("P", "stoch period").replace(")", "") + '/' + Analysis.#getParamsForInd('RSI_').replace("P", "rsi period").replace("(", "")) || "default"}`);
                     },
-                    ICH: () => {
-                        if (!cache.ICH) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    ICH: (gran) => {
+                        if (!cache.ICH[gran]) {
+                            const { close, high, low, latestRate } = getData(gran);
                             const ichimoku = IchimokuCloud.calculate({
                                 high,
                                 low,
@@ -378,30 +451,43 @@ class Analysis {
                             const bull = (latestRate > spanA) && (spanA > spanB) && (conversion > base) && (lag > Math.max(lagSpanA, lagSpanB));
                             const bear = (latestRate < spanA) && (spanA < spanB) && (conversion < base) && (lag < Math.min(lagSpanA, lagSpanB));
                             let sl = spanB;
-                            cache.ICH = true;
-                            cache.ICH_BULL = bull;
-                            cache.ICH_BEAR = bear;
-                            cache.ICH_SL = sl;
+                            cache.ICH[gran] = true;
+                            cache.ICH_BULL[gran] = bull;
+                            cache.ICH_BEAR[gran] = bear;
+                            cache.ICH_SL[gran] = sl;
                         }
-                        if (cache.ICH_BULL || cache.ICH_BEAR) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.ICH_SL} (ICH)` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND != Site.STR_ENTRY_IND)) ?`${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}` : ''}`);
+                        if (cache.ICH_BULL[gran] || cache.ICH_BEAR[gran]) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.ICH_SL[gran]} (ICH ${gran})` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND.name != Site.STR_ENTRY_IND.name)) ? `${Analysis.#getParamsForInd('ICH_').replace("CVP", "conversion period").replace("BSP", "base period").replace("SPP", "span period").replace("DIS", "displacement") || "default"}` : ''}`);
                     },
-                    BLL: () => {
-                        if (cache.BLL_BULL === null) {
-                            cache.BLL_BULL = bullish(csd);
-                            cache.BLL_BEAR = bearish(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BLL: (gran) => {
+                        if (cache.BLL_BULL[gran] === null || cache.BLL_BULL[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BLL_BULL[gran] = bullish(csd);
+                            cache.BLL_BEAR[gran] = bearish(csd);
                         }
-                        if (cache.BLL_BULL || cache.BLL_BEAR) userPrompt[currentStep].push(`CANDLE: ${cache.BLL_BULL ? 'Bullish' : cache.BLL_BEAR ? 'Bearish' : 'No Trend'}`);
+                        if (cache.BLL_BULL[gran] || cache.BLL_BEAR[gran]) userPrompt[currentStep].push(`CANDLE ${gran}: ${cache.BLL_BULL[gran] ? 'Bullish' : cache.BLL_BEAR[gran] ? 'Bearish' : 'No Trend'}`);
                     },
-                    SMA: () => {
-                        if (cache.SMA_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    SMA: (gran) => {
+                        if (cache.SMA_BULL[gran] === null || cache.SMA_BULL[gran] === undefined) {
+                            const { close, latestRate } = getData(gran);
                             const ma = SMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
-                            cache.SMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
-                            cache.SMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                            cache.SMA_BULL[gran] = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.SMA_BEAR[gran] = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        if (cache.SMA_BULL || cache.SMA_BEAR) userPrompt[currentStep].push(`SMA: ${cache.SMA_BULL ? 'Bullish' : cache.SMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
+                        if (cache.SMA_BULL[gran] || cache.SMA_BEAR[gran]) userPrompt[currentStep].push(`SMA ${gran}: ${cache.SMA_BULL[gran] ? 'Bullish' : cache.SMA_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
-                    KST: () => {
-                        if (cache.KST_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    KST: (gran) => {
+                        if (cache.KST_BULL[gran] === null || cache.KST_BULL[gran] === undefined) {
+                            const { close } = getData(gran);
                             const kst = KST.calculate({
                                 ROCPer1: Site.IN_CFG.KST_RP1 ?? 10,
                                 ROCPer2: Site.IN_CFG.KST_RP2 ?? 15,
@@ -418,242 +504,406 @@ class Analysis {
                                 && (((kst[kst.length - 1] || {}).kst || Number.MIN_VALUE) > 0);
                             const bear = (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < ((kst[kst.length - 1] || {}).signal || 0))
                                 && (((kst[kst.length - 1] || {}).kst || Number.MAX_VALUE) < 0);
-                            cache.KST_BULL = bull;
-                            cache.KST_BEAR = bear;
+                            cache.KST_BULL[gran] = bull;
+                            cache.KST_BEAR[gran] = bear;
                         }
-                        if (cache.KST_BULL || cache.KST_BEAR) userPrompt[currentStep].push(`KST: ${cache.KST_BULL ? 'Bullish' : cache.KST_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('KST_').replace(/RP/g, "ROC period ").replace(/SG/, "signal period ").replace(/SP/g, "SMA ROC period ") || "default"}`);
+                        if (cache.KST_BULL[gran] || cache.KST_BEAR[gran]) userPrompt[currentStep].push(`KST ${gran}: ${cache.KST_BULL[gran] ? 'Bullish' : cache.KST_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('KST_').replace(/RP/g, "ROC period ").replace(/SG/, "signal period ").replace(/SP/g, "SMA ROC period ") || "default"}`);
                     },
-                    EMA: () => {
-                        if (cache.EMA_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    EMA: (gran) => {
+                        if (cache.EMA_BULL[gran] === null || cache.EMA_BULL[gran] === undefined) {
+                            const { close, latestRate } = getData(gran);
                             const ma = EMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
-                            cache.EMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
-                            cache.EMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                            cache.EMA_BULL[gran] = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.EMA_BEAR[gran] = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        if (cache.EMA_BULL || cache.EMA_BEAR) userPrompt[currentStep].push(`EMA: ${cache.EMA_BULL ? 'Bullish' : cache.EMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
+                        if (cache.EMA_BULL[gran] || cache.EMA_BEAR[gran]) userPrompt[currentStep].push(`EMA ${gran}: ${cache.EMA_BULL[gran] ? 'Bullish' : cache.EMA_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
-                    WMA: () => {
-                        if (cache.WMA_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    WMA: (gran) => {
+                        if (cache.WMA_BULL[gran] === null || cache.WMA_BULL[gran] === undefined) {
+                            const { close, latestRate } = getData(gran);
                             const ma = WMA.calculate({ values: close, period: Site.IN_CFG.MAP ?? 20 });
-                            cache.WMA_BULL = latestRate > (ma[ma.length - 1] || Infinity);
-                            cache.WMA_BEAR = latestRate < (ma[ma.length - 1] || 0);
+                            cache.WMA_BULL[gran] = latestRate > (ma[ma.length - 1] || Infinity);
+                            cache.WMA_BEAR[gran] = latestRate < (ma[ma.length - 1] || 0);
                         }
-                        if (cache.WMA_BULL || cache.WMA_BEAR) userPrompt[currentStep].push(`WMA: ${cache.WMA_BULL ? 'Bullish' : cache.WMA_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
+                        if (cache.WMA_BULL[gran] || cache.WMA_BEAR[gran]) userPrompt[currentStep].push(`WMA ${gran}: ${cache.WMA_BULL[gran] ? 'Bullish' : cache.WMA_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('MAP') ? `${Analysis.#getParamsForInd('MAP')}` : "default"}`);
                     },
-                    VWP: () => {
-                        if (cache.VWP_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    VWP: (gran) => {
+                        if (cache.VWP_BULL[gran] === null || cache.VWP_BULL[gran] === undefined) {
+                            const { close, latestRate, high, low, volume } = getData(gran);
                             const vwap = VWAP.calculate({ close, high, low, volume });
-                            cache.VWP_BULL = latestRate > (vwap[vwap.length - 1] || Infinity);
-                            cache.VWP_BEAR = latestRate < (vwap[vwap.length - 1] || 0);
+                            cache.VWP_BULL[gran] = latestRate > (vwap[vwap.length - 1] || Infinity);
+                            cache.VWP_BEAR[gran] = latestRate < (vwap[vwap.length - 1] || 0);
                         }
-                        if (cache.VWP_BULL || cache.VWP_BEAR) userPrompt[currentStep].push(`VWAP: ${cache.VWP_BULL ? 'Bullish' : cache.VWP_BEAR ? 'Bearish' : 'No Trend'}`);
+                        if (cache.VWP_BULL[gran] || cache.VWP_BEAR[gran]) userPrompt[currentStep].push(`VWAP ${gran}: ${cache.VWP_BULL[gran] ? 'Bullish' : cache.VWP_BEAR[gran] ? 'Bearish' : 'No Trend'}`);
                     },
-                    AOS: () => {
-                        if (cache.AOS_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    AOS: (gran) => {
+                        if (cache.AOS_BULL[gran] === null || cache.AOS_BULL[gran] === undefined) {
+                            const { high, low } = getData(gran);
                             const ao = AwesomeOscillator.calculate({ high, low, fastPeriod: Site.IN_CFG.AOS_FSP ?? 5, slowPeriod: Site.IN_CFG.AOS_SLP ?? 34 });
-                            cache.AOS_BULL = (ao[ao.length - 1] || 0) > 0;
-                            cache.AOS_BEAR = (ao[ao.length - 1] || 0) < 0;
+                            cache.AOS_BULL[gran] = (ao[ao.length - 1] || 0) > 0;
+                            cache.AOS_BEAR[gran] = (ao[ao.length - 1] || 0) < 0;
                         }
-                        if (cache.AOS_BULL || cache.AOS_BEAR) userPrompt[currentStep].push(`AO: ${cache.AOS_BULL ? 'Bullish' : cache.AOS_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('AOS_').replace("FSP", "fast period").replace("SLP", "slow period") || "default"}`);
+                        if (cache.AOS_BULL[gran] || cache.AOS_BEAR[gran]) userPrompt[currentStep].push(`AO ${gran}: ${cache.AOS_BULL[gran] ? 'Bullish' : cache.AOS_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('AOS_').replace("FSP", "fast period").replace("SLP", "slow period") || "default"}`);
                     },
-                    TRX: () => {
-                        if (cache.TRX_BULL === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    TRX: (gran) => {
+                        if (cache.TRX_BULL[gran] === null || cache.TRX_BULL[gran] === undefined) {
+                            const { close } = getData(gran);
                             const trix = TRIX.calculate({ values: close, period: Site.IN_CFG.TRX_P ?? 15 });
-                            cache.TRX_BULL = (trix[trix.length - 1] || 0) > 0;
-                            cache.TRX_BEAR = (trix[trix.length - 1] || 0) < 0;
+                            cache.TRX_BULL[gran] = (trix[trix.length - 1] || 0) > 0;
+                            cache.TRX_BEAR[gran] = (trix[trix.length - 1] || 0) < 0;
                         }
-                        if (cache.TRX_BULL || cache.TRX_BEAR) userPrompt[currentStep].push(`TRIX: ${cache.TRX_BULL ? 'Bullish' : cache.TRX_BEAR ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('TRX_').replace("P", "period") || "default"}`);
+                        if (cache.TRX_BULL[gran] || cache.TRX_BEAR[gran]) userPrompt[currentStep].push(`TRIX ${gran}: ${cache.TRX_BULL[gran] ? 'Bullish' : cache.TRX_BEAR[gran] ? 'Bearish' : 'No Trend'} ${Analysis.#getParamsForInd('TRX_').replace("P", "period") || "default"}`);
                     },
-                    ADX: () => {
-                        if (cache.STRONG === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    ADX: (gran) => {
+                        if (cache.STRONG[gran] === null || cache.STRONG[gran] === undefined) {
+                            const { close, high, low } = getData(gran);
                             const adx = ADX.calculate({ close, high, low, period: Site.IN_CFG.ADX_P ?? 14 });
-                            cache.STRONG = ((adx[adx.length - 1] || {}).adx || 0) >= 25;
+                            cache.STRONG[gran] = ((adx[adx.length - 1] || {}).adx || 0) >= 25;
                         }
-                        userPrompt[currentStep].push(`ADX = ${cache.STRONG ? 'Strong' : 'Not Strong'} ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}`);
+                        userPrompt[currentStep].push(`ADX ${gran} = ${cache.STRONG[gran] ? 'Strong' : 'Not Strong'} ${Analysis.#getParamsForInd('ADX_').replace("P", "period") || "default"}`);
                     },
-                    STC: () => {
-                        if (cache.STC_OB === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    STC: (gran) => {
+                        if (cache.STC_OB[gran] === null || cache.STC_OB[gran] === undefined) {
+                            const { close, high, low } = getData(gran);
                             const stoch = Stochastic.calculate({ close, high, low, period: Site.IN_CFG.STC_P ?? 14, signalPeriod: Site.IN_CFG.STC_SP ?? 3 });
-                            cache.STC_OB = ((stoch[stoch.length - 1] || {}).k || 0) > 80;
-                            cache.STC_OS = ((stoch[stoch.length - 1] || {}).k || Infinity) < 20;
+                            cache.STC_OB[gran] = ((stoch[stoch.length - 1] || {}).k || 0) > 80;
+                            cache.STC_OS[gran] = ((stoch[stoch.length - 1] || {}).k || Infinity) < 20;
                         }
-                        if ((cache.ENTRY === true && cache.STC_OB) || (cache.ENTRY === false && cache.STC_OS)) userPrompt[currentStep].push(`STOCH ${Analysis.#getParamsForInd('STC_').replace("P", "period").replace("SP", "signal period") || "default"}`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true && cache.STC_OB[gran]) || (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false && cache.STC_OS[gran])) userPrompt[currentStep].push(`STOCH ${gran} ${Analysis.#getParamsForInd('STC_').replace("P", "period").replace("SP", "signal period") || "default"}`);
                     },
-                    RSI: () => {
-                        if (cache.RSI_OB === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    RSI: (gran) => {
+                        if (cache.RSI_OB[gran] === null || cache.RSI_OB[gran] === undefined) {
+                            const { close } = getData(gran);
                             const rsi = RSI.calculate({ values: close, period: Site.IN_CFG.RSI_P ?? 14 });
-                            cache.RSI_OB = (rsi[rsi.length - 1] || 0) > 70;
-                            cache.RSI_OS = (rsi[rsi.length - 1] || Infinity) < 30;
+                            cache.RSI_OB[gran] = (rsi[rsi.length - 1] || 0) > 70;
+                            cache.RSI_OS[gran] = (rsi[rsi.length - 1] || Infinity) < 30;
                         }
-                        if ((cache.ENTRY === true && cache.RSI_OB) || (cache.ENTRY === false && cache.RSI_OS)) userPrompt[currentStep].push(`RSI ${Analysis.#getParamsForInd('RSI_').replace("P", "period") || "default"}`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true && cache.RSI_OB[gran]) || (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false && cache.RSI_OS[gran])) userPrompt[currentStep].push(`RSI ${gran} ${Analysis.#getParamsForInd('RSI_').replace("P", "period") || "default"}`);
                     },
-                    CCI: () => {
-                        if (cache.CCI_OB === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    CCI: (gran) => {
+                        if (cache.CCI_OB[gran] === null || cache.CCI_OB[gran] === undefined) {
+                            const { close, high, low } = getData(gran);
                             const cci = CCI.calculate({ close, high, low, period: Site.IN_CFG.CCI_P ?? 14 });
-                            cache.CCI_OB = (cci[cci.length - 1] || 0) > 100;
-                            cache.CCI_OB = (cci[cci.length - 1] || Infinity) < -100;
+                            cache.CCI_OB[gran] = (cci[cci.length - 1] || 0) > 100;
+                            cache.CCI_OB[gran] = (cci[cci.length - 1] || Infinity) < -100;
                         }
-                        if ((cache.ENTRY === true && cache.CCI_OB) || (cache.ENTRY === false && cache.CCI_OS)) userPrompt[currentStep].push(`CCI ${Analysis.#getParamsForInd('CCI_').replace("P", "period") || "default"}`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true && cache.CCI_OB[gran]) || (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false && cache.CCI_OS[gran])) userPrompt[currentStep].push(`CCI ${gran} ${Analysis.#getParamsForInd('CCI_').replace("P", "period") || "default"}`);
                     },
-                    MFI: () => {
-                        if (cache.MFI_OB === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    MFI: (gran) => {
+                        if (cache.MFI_OB[gran] === null || cache.MFI_OB[gran] === undefined) {
+                            const { close, high, low, volume } = getData(gran);
                             const mfi = MFI.calculate({ close, volume, high, low, period: Site.IN_CFG.MFI_P ?? 14 });
-                            cache.MFI_OB = (mfi[mfi.length - 1] || 0) > 80;
-                            cache.MFI_OS = (mfi[mfi.length - 1] || Infinity) < 20;
+                            cache.MFI_OB[gran] = (mfi[mfi.length - 1] || 0) > 80;
+                            cache.MFI_OS[gran] = (mfi[mfi.length - 1] || Infinity) < 20;
                         }
-                        if ((cache.ENTRY === true && cache.MFI_OB)|| (cache.ENTRY === false && cache.MFI_OS)) userPrompt[currentStep].push(`MFI ${Analysis.#getParamsForInd('MFI_').replace("P", "period") || "default"}`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true && cache.MFI_OB[gran]) || (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false && cache.MFI_OS[gran])) userPrompt[currentStep].push(`MFI ${gran} ${Analysis.#getParamsForInd('MFI_').replace("P", "period") || "default"}`);
                     },
-                    STR: () => {
-                        if (cache.STR === null) {
-                            cache.STR = shootingstar(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    STR: (gran) => {
+                        if (cache.STR[gran] === null || cache.STR[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.STR[gran] = shootingstar(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.STR) userPrompt[currentStep].push(`Shooting Star`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.STR[gran]) userPrompt[currentStep].push(`Shooting Star ${gran}`);
                     },
-                    HGM: () => {
-                        if (cache.HGM === null) {
-                            cache.HGM = hangingman(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    HGM: (gran) => {
+                        if (cache.HGM[gran] === null || cache.HGM[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.HGM[gran] = hangingman(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.HGM) userPrompt[currentStep].push(`Hanging Man`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.HGM[gran]) userPrompt[currentStep].push(`Hanging Man ${gran}`);
 
                     },
-                    EST: () => {
-                        if (cache.EST === null) {
-                            cache.EST = eveningstar(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    EST: (gran) => {
+                        if (cache.EST[gran] === null || cache.EST[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.EST[gran] = eveningstar(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.EST) userPrompt[currentStep].push(`Evening Star`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.EST[gran]) userPrompt[currentStep].push(`Evening Star ${gran}`);
                     },
-                    TBC: () => {
-                        if (cache.TBC === null) {
-                            cache.TBC = threeblackcrows(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    TBC: (gran) => {
+                        if (cache.TBC[gran] === null || cache.TBC[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.TBC[gran] = threeblackcrows(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.TBC) userPrompt[currentStep].push(`Three Black Crows`);
-
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.TBC[gran]) userPrompt[currentStep].push(`Three Black Crows ${gran}`);
                     },
-                    PIL: () => {
-                        if (cache.PIL === null) {
-                            cache.PIL = piercingline(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    PIL: (gran) => {
+                        if (cache.PIL[gran] === null || cache.PIL[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.PIL[gran] = piercingline(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.PIL) userPrompt[currentStep].push(`Piercing Line`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.PIL[gran]) userPrompt[currentStep].push(`Piercing Line ${gran}`);
                     },
-                    DCC: () => {
-                        if (cache.DCC === null) {
-                            cache.DCC = darkcloudcover(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    DCC: (gran) => {
+                        if (cache.DCC[gran] === null || cache.DCC[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.DCC[gran] = darkcloudcover(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.DCC) userPrompt[currentStep].push(`Dark Cloud Cover`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.DCC[gran]) userPrompt[currentStep].push(`Dark Cloud Cover ${gran}`);
                     },
-                    TTP: () => {
-                        if (cache.TTP === null) {
-                            cache.TTP = tweezertop(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    TTP: (gran) => {
+                        if (cache.TTP[gran] === null || cache.TTP[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.TTP[gran] = tweezertop(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.TTP) userPrompt[currentStep].push(`Tweezer Top`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.TTP[gran]) userPrompt[currentStep].push(`Tweezer Top ${gran}`);
                     },
-                    TWS: () => {
-                        if (cache.TWS === null) {
-                            cache.TWS = threewhitesoldiers(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    TWS: (gran) => {
+                        if (cache.TWS[gran] === null || cache.TWS[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.TWS[gran] = threewhitesoldiers(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.TWS) userPrompt[currentStep].push(`Three White Soldiers`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.TWS[gran]) userPrompt[currentStep].push(`Three White Soldiers ${gran}`);
                     },
-                    MST: () => {
-                        if (cache.MST === null) {
-                            cache.MST = morningstar(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    MST: (gran) => {
+                        if (cache.MST[gran] === null || cache.MST[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.MST[gran] = morningstar(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.MST) userPrompt[currentStep].push(`Morning Star`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.MST[gran]) userPrompt[currentStep].push(`Morning Star ${gran}`);
                     },
-                    HMR: () => {
-                        if (cache.HMR === null) {
-                            cache.HMR = hammerpattern(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    HMR: (gran) => {
+                        if (cache.HMR[gran] === null || cache.HMR[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.HMR[gran] = hammerpattern(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.HMR) userPrompt[currentStep].push(`Hammer Pattern`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.HMR[gran]) userPrompt[currentStep].push(`Hammer Pattern ${gran}`);
                     },
-                    TBT: () => {
-                        if (cache.TBT === null) {
-                            cache.TBT = tweezerbottom(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    TBT: (gran) => {
+                        if (cache.TBT[gran] === null || cache.TBT[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.TBT[gran] = tweezerbottom(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.TBT) userPrompt[currentStep].push(`Tweezer Bottom`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.TBT[gran]) userPrompt[currentStep].push(`Tweezer Bottom ${gran}`);
                     },
-                    ABB: () => {
-                        if (cache.ABB === null) {
-                            cache.ABB = abandonedbaby(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    ABB: (gran) => {
+                        if (cache.ABB[gran] === null || cache.ABB[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.ABB[gran] = abandonedbaby(csd);
                         }
-                        if (cache.ABB) userPrompt[currentStep].push(`Abandoned Baby`);
+                        if (cache.ABB[gran]) userPrompt[currentStep].push(`Abandoned Baby ${gran}`);
                     },
-                    BLE: () => {
-                        if (cache.BLE === null) {
-                            cache.BLE = bullishengulfingpattern(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BLE: (gran) => {
+                        if (cache.BLE[gran] === null || cache.BLE[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BLE[gran] = bullishengulfingpattern(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.BLE) userPrompt[currentStep].push(`Bullish Engulfing Pattern`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.BLE[gran]) userPrompt[currentStep].push(`Bullish Engulfing Pattern ${gran}`);
                     },
-                    MDS: () => {
-                        if (cache.MDS === null) {
-                            cache.MDS = morningdojistar(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    MDS: (gran) => {
+                        if (cache.MDS[gran] === null || cache.MDS[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.MDS[gran] = morningdojistar(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.MDS) userPrompt[currentStep].push(`Morning Doji Star`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.MDS[gran]) userPrompt[currentStep].push(`Morning Doji Star ${gran}`);
                     },
-                    DFD: () => {
-                        if (cache.DFD === null) {
-                            cache.DFD = dragonflydoji(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    DFD: (gran) => {
+                        if (cache.DFD[gran] === null || cache.DFD[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.DFD[gran] = dragonflydoji(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.DFD) userPrompt[currentStep].push(`Dragon Fly Doji`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.DFD[gran]) userPrompt[currentStep].push(`Dragon Fly Doji ${gran}`);
                     },
-                    BLH: () => {
-                        if (cache.BLH === null) {
-                            cache.BLH = bullishharami(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BLH: (gran) => {
+                        if (cache.BLH[gran] === null || cache.BLH[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BLH[gran] = bullishharami(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.BLH) userPrompt[currentStep].push(`Bullish Harami`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.BLH[gran]) userPrompt[currentStep].push(`Bullish Harami ${gran}`);
                     },
-                    BLM: () => {
-                        if (cache.BLM === null) {
-                            cache.BLM = bullishmarubozu(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BLM: (gran) => {
+                        if (cache.BLM[gran] === null || cache.BLM[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BLM[gran] = bullishmarubozu(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.BLM) userPrompt[currentStep].push(`Bullish Marubozu`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.BLM[gran]) userPrompt[currentStep].push(`Bullish Marubozu ${gran}`);
                     },
-                    BLC: () => {
-                        if (cache.BLC === null) {
-                            cache.BLC = bullishharamicross(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BLC: (gran) => {
+                        if (cache.BLC[gran] === null || cache.BLC[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BLC[gran] = bullishharamicross(csd);
                         }
-                        if ((cache.ENTRY === false) && cache.BLC) userPrompt[currentStep].push(`Bullish Harami Cross`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) && cache.BLC[gran]) userPrompt[currentStep].push(`Bullish Harami Cross ${gran}`);
                     },
-                    BEP: () => {
-                        if (cache.BEP === null) {
-                            cache.BEP = bearishengulfingpattern(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BEP: (gran) => {
+                        if (cache.BEP[gran] === null || cache.BEP[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BEP[gran] = bearishengulfingpattern(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.BEP) userPrompt[currentStep].push(`Bearish Engulfing Pattern`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.BEP[gran]) userPrompt[currentStep].push(`Bearish Engulfing Pattern ${gran}`);
                     },
-                    EDS: () => {
-                        if (cache.EDS === null) {
-                            cache.EDS = eveningdojistar(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    EDS: (gran) => {
+                        if (cache.EDS[gran] === null || cache.EDS[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.EDS[gran] = eveningdojistar(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.EDS) userPrompt[currentStep].push(`Evening Doji Star`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.EDS[gran]) userPrompt[currentStep].push(`Evening Doji Star ${gran}`);
                     },
-                    GSD: () => {
-                        if (cache.GSD === null) {
-                            cache.GSD = gravestonedoji(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    GSD: (gran) => {
+                        if (cache.GSD[gran] === null || cache.GSD[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.GSD[gran] = gravestonedoji(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.GSD) userPrompt[currentStep].push(`Gravestone Doji`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.GSD[gran]) userPrompt[currentStep].push(`Gravestone Doji ${gran}`);
                     },
-                    BRH: () => {
-                        if (cache.BRH === null) {
-                            cache.BRH = bearishharami(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BRH: (gran) => {
+                        if (cache.BRH[gran] === null || cache.BRH[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BRH[gran] = bearishharami(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.BRH) userPrompt[currentStep].push(`Bearish Harami`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.BRH[gran]) userPrompt[currentStep].push(`Bearish Harami ${gran}`);
                     },
-                    BRM: () => {
-                        if (cache.BRM === null) {
-                            cache.BRM = bearishmarubozu(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BRM: (gran) => {
+                        if (cache.BRM[gran] === null || cache.BRM[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BRM[gran] = bearishmarubozu(csd);
                         }
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.BRM[gran]) userPrompt[currentStep].push(`Bearish Marubozu ${gran}`);
                     },
-                    BHC: () => {
-                        if (cache.BHC === null) {
-                            cache.BHC = bearishharamicross(csd);
+                    /**
+                     * @param {string} gran 
+                     */
+                    BHC: (gran) => {
+                        if (cache.BHC[gran] === null || cache.BHC[gran] === undefined) {
+                            const { close, high, low, open } = getData(gran);
+                            const csd = { open, high, low, close };
+                            cache.BHC[gran] = bearishharamicross(csd);
                         }
-                        if ((cache.ENTRY === true) && cache.BHC) userPrompt[currentStep].push(`Bearish Harami Cross`);
+                        if ((cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) && cache.BHC[gran]) userPrompt[currentStep].push(`Bearish Harami Cross ${gran}`);
                     },
-                    ATR: () => {
-                        if (cache.ATR === null) {
+                    /**
+                     * @param {string} gran 
+                     */
+                    ATR: (gran) => {
+                        if (cache.ATR[gran] === null || cache.ATR[gran] === undefined) {
+                            const { close, high, low, latestRate } = getData(gran);
                             const atr = ATR.calculate({ period: Site.IN_CFG.ATR_P ?? 14, close, high, low });
                             const perc = ((atr[atr.length - 1] || 0) / latestRate) * 100;
-                            cache.ATR = perc;
+                            cache.ATR[gran] = perc;
                         }
-                        userPrompt[currentStep].push([`ATR = ${(cache.ATR || 0).toFixed(2)}% of price ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}`]);
+                        userPrompt[currentStep].push([`ATR ${gran} = ${(cache.ATR[gran] || 0).toFixed(2)}% of price ${Analysis.#getParamsForInd('ATR_').replace("P", "period") || "default"}`]);
                     },
                 };
 
@@ -663,15 +913,15 @@ class Analysis {
                  */
                 const step1 = () => {
                     currentStep = 1;
-                    ensureInd[Site.STR_ENTRY_IND]();
+                    ensureInd[Site.STR_ENTRY_IND.name](Site.STR_ENTRY_IND.granularity);
                     if (!Analysis.#isEntryBull[symbol]) {
                         Analysis.#isEntryBull[symbol] = [];
                     }
                     if (!Analysis.#isEntryBear[symbol]) {
                         Analysis.#isEntryBear[symbol] = [];
                     }
-                    Analysis.#isEntryBull[symbol].push(cache[`${Site.STR_ENTRY_IND}_BULL`] || false);
-                    Analysis.#isEntryBear[symbol].push(cache[`${Site.STR_ENTRY_IND}_BEAR`] || false);
+                    Analysis.#isEntryBull[symbol].push(cache[`${Site.STR_ENTRY_IND.name}_BULL`][Site.STR_ENTRY_IND.granularity] || false);
+                    Analysis.#isEntryBear[symbol].push(cache[`${Site.STR_ENTRY_IND.name}_BEAR`][Site.STR_ENTRY_IND.granularity] || false);
                     if (Analysis.#isEntryBull[symbol].length > (Site.IN_CFG.DIR_LEN || 5)) {
                         Analysis.#isEntryBull[symbol] = Analysis.#isEntryBull[symbol].slice(Analysis.#isEntryBull[symbol].length - (Site.IN_CFG.DIR_LEN || 5));
                     }
@@ -694,13 +944,13 @@ class Analysis {
                 const step2 = () => {
                     currentStep = 2;
                     for (let i = 0; i < Site.STR_TREND_IND.length; i++) {
-                        ensureInd[Site.STR_TREND_IND[i]]();
+                        ensureInd[Site.STR_TREND_IND[i].name](Site.STR_TREND_IND[i].granularity);
                     }
                     currentStep = 0;
                     /**
                      * @type {boolean[]}
                      */
-                    const bools = Site.STR_TREND_IND.map(x => cache[`${x}_${cache.ENTRY ? 'BULL' : 'BEAR'}`] || false);
+                    const bools = Site.STR_TREND_IND.map(x => cache[`${x.name}_${cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? 'BULL' : 'BEAR'}`][x.granularity] || false);
                     return booleanConsolidator(bools, Site.STR_TREND_CV);
                 }
 
@@ -710,9 +960,9 @@ class Analysis {
                  */
                 const step3 = () => {
                     currentStep = 3;
-                    ensureInd.ADX();
+                    ensureInd.ADX(Site.STR_STG_IND_GRAN);
                     currentStep = 0;
-                    return cache.STRONG || false;
+                    return cache.STRONG[Site.STR_STG_IND_GRAN] || false;
                 }
 
                 /**
@@ -722,13 +972,13 @@ class Analysis {
                 const step4 = () => {
                     currentStep = 4;
                     for (let i = 0; i < Site.STR_OB_IND.length; i++) {
-                        ensureInd[Site.STR_OB_IND[i]]();
+                        ensureInd[Site.STR_OB_IND[i].name](Site.STR_OB_IND[i].granularity);
                     }
                     currentStep = 0;
                     /**
                      * @type {boolean[]}
                      */
-                    const bools = Site.STR_OB_IND.map(x => cache[`${x}_${cache.ENTRY ? 'OB' : 'OS'}`] || false);
+                    const bools = Site.STR_OB_IND.map(x => cache[`${x.name}_${cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? 'OB' : 'OS'}`][x.granularity] || false);
                     return booleanConsolidator(bools, Site.STR_OB_CV);
                 }
 
@@ -738,14 +988,14 @@ class Analysis {
                  */
                 const step5 = () => {
                     currentStep = 5;
-                    for (let i = 0; i < (cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).length; i++) {
-                        ensureInd[(cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR)[i]]();
+                    for (let i = 0; i < (cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).length; i++) {
+                        ensureInd[(cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR)[i].name]((cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR)[i].granularity);
                     }
                     currentStep = 0;
                     /**
                      * @type {boolean[]}
                      */
-                    const bools = (cache.ENTRY ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).map(x => cache[`${x}`] || false);
+                    const bools = (cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? Site.STR_REV_IND_BULL : Site.STR_REV_IND_BEAR).map(x => cache[`${x.name}`][x.granularity] || false);
                     return booleanConsolidator(bools, Site.STR_REV_CV);
                 }
 
@@ -755,13 +1005,13 @@ class Analysis {
                  */
                 const step6 = () => {
                     currentStep = 6;
-                    ensureInd[Site.STR_TSL_IND]();
+                    ensureInd[Site.STR_TSL_IND.name](Site.STR_TSL_IND.granularity);
                     currentStep = 0;
-                    if (cache.ENTRY === true) {
-                        return cache[`${Site.STR_TSL_IND}_SL`] < latestRate ? cache[`${Site.STR_TSL_IND}_SL`] : (latestRate - (cache[`${Site.STR_TSL_IND}_SL`] - latestRate));
+                    if (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) {
+                        return cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity] < latestRate ? cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity] : (latestRate - (cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity] - latestRate));
                     }
-                    else if (cache.ENTRY === false) {
-                        return cache[`${Site.STR_TSL_IND}_SL`] > latestRate ? cache[`${Site.STR_TSL_IND}_SL`] : (latestRate + (latestRate - cache[`${Site.STR_TSL_IND}_SL`]));
+                    else if (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) {
+                        return cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity] > latestRate ? cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity] : (latestRate + (latestRate - cache[`${Site.STR_TSL_IND.name}_SL`][Site.STR_TSL_IND.granularity]));
                     }
                     return 0;
                 }
@@ -772,9 +1022,9 @@ class Analysis {
                  */
                 const step7 = () => {
                     currentStep = 7;
-                    ensureInd.ATR();
+                    ensureInd.ATR(Site.STR_VOL_IND_GRAN);
                     currentStep = 0;
-                    return cache.ATR >= (Site.STR_VOL_RNG[0] || 0) && cache.ATR <= (Site.STR_VOL_RNG[1] || Infinity);
+                    return cache.ATR[Site.STR_VOL_IND_GRAN] >= (Site.STR_VOL_RNG[0] || 0) && cache.ATR[Site.STR_VOL_IND_GRAN] <= (Site.STR_VOL_RNG[1] || Infinity);
                 }
 
                 let stoploss = 0;
@@ -783,20 +1033,20 @@ class Analysis {
                 let desc = "No Signal";
 
                 Log.flow(`Analysis > ${symbol} > Checking for entry...`, 6);
-                cache.ENTRY = step1();
-                const flip = (cache.ENTRY === true) ? "Bullish flip" : (cache.ENTRY === false) ? "Bearish flip" : "";
-                const sig = (cache.ENTRY === true) ? "Long" : (cache.ENTRY === false) ? "Short" : "";
-                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")} = ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
+                cache.ENTRY[Site.STR_ENTRY_IND.granularity] = step1();
+                const flip = (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) ? "Bullish flip" : (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) ? "Bearish flip" : "";
+                const sig = (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) ? "Long" : (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) ? "Short" : "";
+                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.name.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")} = ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
                 currentStep = 0;
-                if (cache.ENTRY === true || cache.ENTRY === false) {
+                if (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true || cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) {
                     // Entry detected.
-                    Log.flow(`Analysis > ${symbol} > Entry detected. Confirming ${cache.ENTRY ? 'bull' : 'bear'} trend...`, 6);
+                    Log.flow(`Analysis > ${symbol} > Entry detected. Confirming ${cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? 'bull' : 'bear'} trend...`, 6);
                     if ((step2() && Site.STR_TREND_FV) || (!Site.STR_TREND_FV)) {
                         // Trend confirmed.
                         Log.flow(`Analysis > ${symbol} > Trend confirmed. Checking trend strength...`, 6);
                         if ((step3() && Site.STR_STG_FV) || (!Site.STR_STG_FV)) {
                             // Trend strength confirmed.
-                            Log.flow(`Analysis > ${symbol} > Strength is acceptable. Checking if over${cache.ENTRY ? 'bought' : 'sold'}...`, 6);
+                            Log.flow(`Analysis > ${symbol} > Strength is acceptable. Checking if over${cache.ENTRY[Site.STR_ENTRY_IND.granularity] ? 'bought' : 'sold'}...`, 6);
                             if (((!step4()) && Site.STR_OB_FV) || (!Site.STR_OB_FV)) {
                                 // No presence of effecting overbought confirmed.
                                 Log.flow(`Analysis > ${symbol} > Overbought condition acceptable. Checking for reversals...`, 6);
@@ -806,7 +1056,7 @@ class Analysis {
                                     if (step7()) {
                                         // Volatility is acceptable
                                         Log.flow(`Analysis > ${symbol} > Volatility is acceptable. Buy signal confirmed.`, 6);
-                                        if (cache.ENTRY) {
+                                        if (cache.ENTRY[Site.STR_ENTRY_IND.granularity]) {
                                             long = true;
                                             desc = "Confirmed Long"
                                         }
@@ -843,12 +1093,12 @@ class Analysis {
                 // Stop loss computed.
                 // Object.keys(ensureInd).forEach(key => ensureInd[key]());
 
-
-                const signal = new Signal(short, long, desc, cache.ATR, stoploss, latestRate);
+                const signal = new Signal(short || false, long || false, desc || 'No Description', cache.ATR[Site.STR_VOL_IND_GRAN] || 0, stoploss || 0, latestRate);
 
                 Analysis.#multilayer(symbol, long, short, desc, latestRate, ts, signal);
                 const signals = Analysis.#getMultilayeredHistory(symbol);
-                cache = Object.fromEntries(Object.entries(cache).filter(([__dirname, v]) => v !== null));
+                cache = Object.fromEntries(Object.entries(cache).filter(([__dirname, v]) => Object.keys(v).length > 0));
+
 
                 // CORRECT SIGNALS HERE
                 const { nlong, nshort, ndesc } = Analysis.#correctSignals(signals, long, short, desc);

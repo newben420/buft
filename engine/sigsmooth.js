@@ -79,12 +79,12 @@ class LoneSignal {
         const start = Date.now();
         const conclude = () => {
             const diff = Date.now() - start;
-            if (diff >= Site.TK_INTERVAL) {
+            if (diff >= Site.TK_INTERVALS[0]) {
                 Log.flow(`LoneSignal > ${this.symbol} > End iteration.`, 4);
                 this.runner();
             }
             else {
-                let remTime = Site.TK_INTERVAL - diff;
+                let remTime = Site.TK_INTERVALS[0] - diff;
                 Log.flow(`LoneSignal > ${this.symbol} > End iteration. Next in ${getTimeElapsed(0, remTime)}.`, 4);
                 this.intervalRef = setTimeout(() => {
                     this.runner();

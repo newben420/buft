@@ -21,7 +21,11 @@ const models = {
     "meta-llama/llama-prompt-guard-2-86m": { RPM: 30, RPD: 14400, TPM: 15000 },
     "mistral-saba-24b": { RPM: 30, RPD: 1000, TPM: 6000, TPD: 500000 },
     "qwen-qwq-32b": { RPM: 30, RPD: 1000, TPM: 6000 },
-    "qwen/qwen3-32b": { RPM: 60, RPD: 1000, TPM: 6000 }
+    "qwen/qwen3-32b": { RPM: 60, RPD: 1000, TPM: 6000 },
+    "openai/gpt-oss-120b": { RPM: 30, RPD: 1000, TPM: 8000, TPD: 200000 },
+    "openai/gpt-oss-20b": { RPM: 30, RPD: 1000, TPM: 8000, TPD: 200000 },
+    "moonshotai/kimi-k2-instruct": {RPM: 60, RPD: 1000, TPM: 10000, TPD: 300000},
+    "moonshotai/kimi-k2-instruct-0905": {RPM: 60, RPD: 1000, TPM: 10000, TPD: 300000},
 };
 
 class GroqEngine {
