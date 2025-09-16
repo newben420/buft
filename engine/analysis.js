@@ -41,6 +41,7 @@ const getDateTime = require("../lib/get_date_time");
 const formatNumber = require("../lib/format_number");
 const getTimeElapsed = require("../lib/get_time_elapsed");
 const getDateTime2 = require("../lib/get_date_time_2");
+const TimeCycle = require("../lib/time_cycle");
 
 class DataX {
     /**
@@ -300,6 +301,9 @@ class Analysis {
                     PSR_BULL: {},
                     PSR_BEAR: {},
                     PSR_SL: {},
+                    TMC: {},
+                    TMC_BULL: {},
+                    TMC_BEAR: {},
                     MCD: {},
                     MCD_BULL: {},
                     MCD_BEAR: {},
@@ -385,6 +389,24 @@ class Analysis {
                             cache.PSR_SL[gran] = sl;
                         }
                         if (cache.PSR_BULL[gran] || cache.PSR_BEAR[gran]) userPrompt[currentStep].push(`${currentStep == 6 ? `${cache.PSR_SL[gran]} (PSAR ${gran})` : ''} ${(currentStep == 1 || (currentStep == 6 && Site.STR_TSL_IND.name != Site.STR_ENTRY_IND.name)) ? `${Analysis.#getParamsForInd('PSR_').replace("ST", "step").replace("mx", "max") || "default"}` : ''}`);
+                    },
+                    /**
+                     * @param {string} gran 
+                     */
+                    TMC: (gran) => {
+                        let desc = '';
+                        if (!cache.TMC[gran]) {
+                            const { open, high, low,close } = getData(gran);
+                            const tmc = TimeCycle.calculate({close, high, low, open, period: Site.IN_CFG.TMC_P ?? 20, model: 'both'});
+                            const tmcBull = tmc.map(x => x.long).find(x => x);
+                            const tmcBear = tmc.map(x => x.short).find(x => x);
+                            cache.TMC[gran] = true;
+                            cache.TMC_BULL[gran] = tmcBull;
+                            cache.TMC_BEAR[gran] = tmcBear;
+                            desc = (tmc[tmc.length - 1] || {}).description || '';
+                            // console.log(tmc);
+                        }
+                        if (cache.TMC_BULL[gran] || cache.TMC_BEAR[gran]) userPrompt[currentStep].push(`${Analysis.#getParamsForInd('TMC_').replace("P", "period").replace("(", `(${desc ? (desc + ', ') : ''}`) || "default"}`);
                     },
                     /**
                      * @param {string} gran 
@@ -1036,7 +1058,7 @@ class Analysis {
                 cache.ENTRY[Site.STR_ENTRY_IND.granularity] = step1();
                 const flip = (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) ? "Bullish flip" : (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) ? "Bearish flip" : "";
                 const sig = (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true) ? "Long" : (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) ? "Short" : "";
-                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.name.replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")} = ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
+                userPrompt[currentStep][0] = `${Site.STR_ENTRY_IND.name.replace("TMC", "Time Cycle").replace("ICH", "ICH").replace("PSR", "PSAR").replace("MCD", "MACD")} ${Site.STR_ENTRY_IND.granularity} = ${flip} → ${sig} ${userPrompt[currentStep][0]}`;
                 currentStep = 0;
                 if (cache.ENTRY[Site.STR_ENTRY_IND.granularity] === true || cache.ENTRY[Site.STR_ENTRY_IND.granularity] === false) {
                     // Entry detected.
