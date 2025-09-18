@@ -7,6 +7,7 @@ const getTimeElapsed = require("../lib/get_time_elapsed");
 const Analysis = require("../engine/analysis");
 const Trader = require("../engine/trader");
 const reverseGranularity = require("../lib/reverse_granularity");
+const getDateTime = require("../lib/get_date_time");
 
 /**
  * This holds an added Ticker data
@@ -104,6 +105,10 @@ class Ticker {
      */
     fetchCandleStickData() {
         this.last_fetched = Date.now();
+        let remRows = 0;
+        if (Site.TK_COMPUTED_MAX_ROWS > 1000 && this.candlestickData.length <= 0) {
+            remRows = Site.TK_COMPUTED_MAX_ROWS - 1000;
+        }
         const conclude = () => {
             const now = Date.now();
             const scheduledTS = this.last_fetched + Site.TK_INTERVALS[0];
@@ -122,15 +127,60 @@ class Ticker {
             }
         }
         Log.flow(`Candlestick > ${this.symbol} > Initialized.`, 5);
+        const ts = Date.now();
         BitgetEngine.getRestClient().getFuturesCandles({
             granularity: Site.TK_GRANULARITIES[0],
             productType: Site.TK_PRODUCT_TYPE,
             symbol: this.symbol,
             kLineType: "MARKET",
             limit: this.candlestickData.length > 0 ? `1` : `${Math.min(1000, Site.TK_COMPUTED_MAX_ROWS)}`,
-        }).then(data => {
+        }).then(async (data) => {
             if (data.msg == "success") {
-                const d = data.data;
+                let d = data.data;
+                await ((async () => {
+                    let endTime = Date.now();
+                    let error = false;
+                    let errMessage = '';
+                    const ran = !!remRows;
+                    let rowsFetched = d.length;
+                    while (remRows > 0 && (!error)) {
+                        const nowFetching = remRows > 1000 ? 1000 : remRows;
+                        remRows = remRows - nowFetching;
+                        let endTime = ts - (rowsFetched * Site.TK_INTERVALS[0])
+                        Log.flow(`Candlestick > ${this.symbol} > Now fetching ${nowFetching} supplementary row${nowFetching == 1 ? '' : 's'} up till ${getDateTime(endTime)}.`, 5);
+                        try {
+                            const extra = await BitgetEngine.getRestClient().getFuturesCandles({
+                                granularity: Site.TK_GRANULARITIES[0],
+                                productType: Site.TK_PRODUCT_TYPE,
+                                symbol: this.symbol,
+                                kLineType: "MARKET",
+                                limit: `${nowFetching}`,
+                                endTime: `${endTime}`,
+                            });
+                            const sd = extra.data;
+                            if(sd && Array.isArray(sd)){
+                                d = [...sd, ...d];
+                                rowsFetched += sd.length;
+                            }
+                            else{
+                                error = true;
+                                errMessage = 'Unknown data returned';
+                            }
+                        } catch (error) {
+                            Log.dev(error);
+                            error = true;
+                            if (error.message) {
+                                errMessage = error.message;
+                            }
+                        }
+                    }
+                    if (error) {
+                        Log.flow(`Candlestick > ${this.symbol} > Stopped fetching supplementary due to '${errMessage}' error.`, 5);
+                    }
+                    else if (ran) {
+                        Log.flow(`Candlestick > ${this.symbol} > Done fetching supplementary rows.`, 5);
+                    }
+                })());
                 this.consoleCache = {};
                 this.candlestickData = this.candlestickData.concat(d.map(x => new Candlestick(x[1], x[2], x[3], x[4], x[6], x[0])));
                 if (this.candlestickData.length > Site.TK_COMPUTED_MAX_ROWS) {
