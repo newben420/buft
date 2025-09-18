@@ -397,7 +397,7 @@ class Analysis {
                         let desc = '';
                         if (!cache.TMC[gran]) {
                             const { open, high, low,close } = getData(gran);
-                            const tmc = TimeCycle.calculate({close, high, low, open, period: Site.IN_CFG.TMC_P ?? 20, model: 'both'});
+                            const tmc = TimeCycle.calculate({close, high, low, open, period: Site.IN_CFG.TMC_P ?? 20, model: (Site.IN_CFG.TMC_MODEL && ['reverse', 'both', 'continuous'].includes(Site.IN_CFG.TMC_MODEL)) ? Site.IN_CFG.TMC_MODEL : 'both'});
                             const tmcBull = tmc.map(x => x.long).find(x => x);
                             const tmcBear = tmc.map(x => x.short).find(x => x);
                             cache.TMC[gran] = true;
