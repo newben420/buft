@@ -525,7 +525,7 @@ class BroadcastEngine {
             if (history.length > 0) {
                 prompt[1].content += `\n\nPrevious Signals:\n` +
                     history.map(row =>
-                        `- ${row.long ? "LONG" : "SHORT"} | ${getTimeElapsed(row.ts, Date.now())} ago | ${row.price} | ${row.supported ? "✓" : "✗"} ${row.confidence}%`
+                        `- ${row.long ? "LONG" : "SHORT"} | ${getTimeElapsed(row.ts, Date.now())} ago | price: ${row.price} | ${row.supported ? "Supported" : "Not Supported"} ${row.confidence}%`
                     ).join("\n");
             }
 
