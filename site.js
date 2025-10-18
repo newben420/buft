@@ -160,6 +160,7 @@ class Site {
     static ATR_INTERVAL_MS = parseInt(process.env.ATR_INTERVAL_MS || "0") || 5000;
     static ATR_TIMEOUT_MS = parseInt(process.env.ATR_TIMEOUT_MS || "0") || 1800000;
     static ATR_AUTO_ENABLE = (process.env.ATR_AUTO_ENABLE || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 4).map(x => ({ minOccur: x[0] || 0, maxOccur: x[1] || 0, minConf: x[2] || 0, supportReq: x[3] == 1 })).filter(x => true);
+    static ATR_INDS = (process.env.ATR_INDS || "ATR").split(" ").filter(x => x.length > 0 && /^(atr)|(tch(_.*)?)$/i.test(x)).map(x => x.split("_")).map(x => ({ind: (x[0] || '').toLowerCase(), gran: x[1] || Site.TK_GRANULARITY_DEF})).filter(x => Site.TK_GRANULARITIES.includes(x.gran));
 
     static DC_MAX_LATEST_SIGNALS = parseInt(process.env.DC_MAX_LATEST_SIGNALS || "0") || 5;
     static DC_MIN_DOM_PERC = parseFloat(process.env.DC_MIN_DOM_PERC || '0') || 51;

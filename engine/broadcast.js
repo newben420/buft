@@ -6,9 +6,11 @@ const { GroqEngine } = require("./groq");
 const Log = require("../lib/log");
 const getTimeElapsed = require("../lib/get_time_elapsed");
 const Signal = require("../model/signal");
+const TimeCycle = require("../lib/time_cycle");
 
 let Trader = null;
 let TelegramEngine = null;
+let TickerEngine = null;
 
 /**
  * Helps track recurring signals.
@@ -354,21 +356,70 @@ class BroadcastEngine {
         if (!TelegramEngine) {
             TelegramEngine = require("./telegram");
         }
+        const INDICATORS = {
+            atr: (breakoutPrice, long) => long ? (price >= breakoutPrice) : (price <= breakoutPrice),
+            tch: (gran, long) => {
+                if (!TickerEngine) {
+                    TickerEngine = require("./ticker");
+                }
+                const ticker = TickerEngine.getTicker(symbol);
+                if (ticker) {
+                    const data = ticker.getConsolidateData(gran);
+                    /**
+                     * @type {number[]}
+                     */
+                    const open = data.map(x => x.open);
+                    /**
+                     * @type {number[]}
+                     */
+                    const high = data.map(x => x.high);
+                    /**
+                     * @type {number[]}
+                     */
+                    const low = data.map(x => x.low);
+                    /**
+                     * @type {number[]}
+                     */
+                    const close = data.map(x => x.close);
+
+                    const tmc = TimeCycle.calculate({ close, high, low, open, period: Site.IN_CFG.TMC_P ?? 20, model: (Site.IN_CFG.TMC_MODEL && ['reverse', 'both', 'continuous'].includes(Site.IN_CFG.TMC_MODEL)) ? Site.IN_CFG.TMC_MODEL : 'both' });
+                    return (long ? tmc.map(x => x.long).find(x => x) : tmc.map(x => x.short).find(x => x)) || false;
+                }
+                else {
+                    return false;
+                }
+            }
+        };
         if (BroadcastEngine.atr[`${symbol}_LONG`]) {
             if (!BroadcastEngine.#executingATR[`${symbol}_LONG`]) {
                 BroadcastEngine.#executingATR[`${symbol}_LONG`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_LONG`];
-                if (price >= atd.price && BroadcastEngine.autoATR) {
+                let pass = false;
+                let passReason = '';
+                for (const cond of Site.ATR_INDS){
+                    if(cond.ind == "atr"){
+                        pass = INDICATORS.atr(atd.price, true);
+                        passReason = 'atr';
+                    }
+                    else if(cond.ind == "tch"){
+                        pass = INDICATORS.tch(cond.gran, true);
+                        passReason = `tch ${gran}`;
+                    }
+                    if(pass){
+                        break;
+                    }
+                }
+                if (pass && BroadcastEngine.autoATR) {
                     const domSig = this.getDominantSignal();
                     if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.long) {
                         const mark = atd.price / (1 + (atd.vol) / 100);
-                        const signal = new Signal(false, true, "ATR Long", atd.vol, atd.sl, mark);
+                        const signal = new Signal(false, true, "ATR Long "+` (${passReason})`, atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
                         if (done) {
-                            TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`✅ ATR \`(${passReason}\`) executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         else {
-                            TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR \`(${passReason}\`) for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         delete BroadcastEngine.atr[`${symbol}_LONG`];
                     }
@@ -380,17 +431,32 @@ class BroadcastEngine {
             if (!BroadcastEngine.#executingATR[`${symbol}_SHORT`]) {
                 BroadcastEngine.#executingATR[`${symbol}_SHORT`] = true;
                 const atd = BroadcastEngine.atr[`${symbol}_SHORT`];
-                if (price <= atd.price && BroadcastEngine.autoATR) {
+                let pass = false;
+                let passReason = '';
+                for (const cond of Site.ATR_INDS){
+                    if(cond.ind == "atr"){
+                        pass = INDICATORS.atr(atd.price, false);
+                        passReason = 'atr';
+                    }
+                    else if(cond.ind == "tch"){
+                        pass = INDICATORS.tch(cond.gran, false);
+                        passReason = `tch ${gran}`;
+                    }
+                    if(pass){
+                        break;
+                    }
+                }
+                if (pass && BroadcastEngine.autoATR) {
                     const domSig = this.getDominantSignal();
                     if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.short) {
                         const mark = atd.price / (1 - (atd.vol) / 100);
-                        const signal = new Signal(true, false, "ATR Short", atd.vol, atd.sl, mark);
+                        const signal = new Signal(true, false, "ATR Short"+` (${passReason})`, atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
                         if (done) {
-                            TelegramEngine.sendMessage(`✅ ATR executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`✅ ATR \`(${passReason}\`) executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         else {
-                            TelegramEngine.sendMessage(`❌ Failed to execute ATR for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR \`(${passReason}\`) for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         delete BroadcastEngine.atr[`${symbol}_SHORT`];
                     }
