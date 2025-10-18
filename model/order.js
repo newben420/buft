@@ -126,6 +126,11 @@ class Order {
     manual;
 
     /**
+     * @type {number}
+     */
+    capital;
+
+    /**
      * Object constructor
      * @param {string} symbol 
      * @param {string} id, 
@@ -134,6 +139,7 @@ class Order {
      * @param {number} sl 
      * @param {boolean} manual 
      * @param {string} open_reason 
+     * @param {number} cap 
      */
     constructor(
         symbol,
@@ -143,6 +149,7 @@ class Order {
         sl,
         manual,
         open_reason,
+        cap,
     ) {
         this.symbol = symbol;
         this.id = id;
@@ -169,6 +176,7 @@ class Order {
         this.leverage = 1;
         this.close_reason = "Manual";
         this.orderId = "";
+        this.capital = cap;
     }
 }
 

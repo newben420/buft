@@ -3,6 +3,7 @@ const Ticker = require("../model/ticker");
 const Site = require("../site");
 const BitgetEngine = require("./bitget");
 let Analysis = null;
+let Trader = null;
 
 /**
  * Manages ticker
@@ -154,6 +155,10 @@ class TickerEngine {
         if(TickerEngine.#tickers[symbol]){
             TickerEngine.#tickers[symbol].mark_price = price;
         }
+        if(!Trader){
+            Trader = require("./trader");
+        }
+        Trader.simulatedPositionUpdate(symbol, price);
     }
 
     /**

@@ -9,9 +9,11 @@ const BitgetEngine = require("./bitget");
 const generateLowercaseAlphanumeric = require("../lib/unique_string");
 const DupSig = require("./dup_sig");
 const { computeArithmeticDirection } = require("../lib/direction");
+const formatNumber = require("../lib/format_number");
 
 let SigSmooth = null;
 let BroadcastEngine = null;
+let TickerEngine = null;
 
 /**
  * Manages trades and signal exec.
@@ -185,36 +187,140 @@ class Trader {
                                     else {
                                         // valid
                                         const id = Trader.#generateOrderID();
-                                        const ord = new Order(symbol, id, signal.long ? "long" : "short", Date.now(), signal.tpsl, manual, signal.description);
+                                        const ord = new Order(symbol, id, signal.long ? "long" : "short", Date.now(), signal.tpsl, manual, signal.description, capital);
                                         Trader.#tempOrders.push(ord);
-                                        const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
-                                            symbol: symbol,
-                                            productType: Site.TK_PRODUCT_TYPE,
-                                            marginMode: Site.TR_MARGIN_MODE,
-                                            marginCoin: Site.TK_MARGIN_COIN,
-                                            side: signal.long ? "buy" : "sell",
-                                            tradeSide: "open",
-                                            orderType: "market",
-                                            clientOid: id,
-                                            size: `${amt}`,
-                                        });
-                                        if (order.msg == "success") {
-                                            if (!BroadcastEngine) {
-                                                BroadcastEngine = require("./broadcast");
+                                        // also... the engine that periodically and manually gets order status... in simulation mode,
+                                        if (Site.SIM_ENABLED) {
+                                            // EXTERNAL WORK HERE
+                                            let OID = `SIM${Date.now()}`;
+                                            let side = signal.long ? "long" : "short";
+                                            let tradeSide = "open";
+                                            // do pre trade checks
+                                            const tradeAlreadyExists = () => Trader.#orders.map(o => `${o.symbol}`).includes(`${symbol}`);
+                                            const concurrentLimitReached = () => Trader.#orders.length >= Site.SIM_MAX_CONCURRENT_TRADES;
+                                            if (tradeAlreadyExists()) {
+                                                Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);
+                                                Log.flow(`Trader > Open > ${symbol} > Error > Trade already exists.`, 3);
+                                                if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nTrade already exists`);
+                                                success = false;
                                             }
-                                            delete BroadcastEngine.atr[`${symbol}_${signal.long ? "LONG" : "SHORT"}`];
-                                            Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
-                                            Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
-                                            success = true;
-                                            if (!manual) {
-                                                DupSig.add(`${signal.long ? `LONG` : `SHORT`}${symbol}`);
+                                            else if (concurrentLimitReached()) {
+                                                Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);
+                                                Log.flow(`Trader > Open > ${symbol} > Error > Concurrency limit reached.`, 3);
+                                                if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\nConcurrency limit reached`);
+                                                success = false;
+                                            }
+                                            else {
+                                                // create order
+                                                Trader.#createOrder(
+                                                    symbol,
+                                                    side,
+                                                    tradeSide,
+                                                    Date.now(),
+                                                    OID,
+                                                    id,
+                                                    amt,
+                                                );
+                                                // fill order
+                                                if (!TickerEngine) {
+                                                    TickerEngine = require('./ticker');
+                                                }
+                                                const ticker = TickerEngine.getTicker(symbol);
+                                                if (ticker) {
+                                                    const fillPrice = ticker.getMarkPrice();
+                                                    Trader.#fillOrder(
+                                                        symbol,
+                                                        side,
+                                                        tradeSide,
+                                                        Date.now(),
+                                                        OID,
+                                                        id,
+                                                        amt,
+                                                        fillPrice,
+                                                        0,
+                                                    );
+                                                    if (!BroadcastEngine) {
+                                                        BroadcastEngine = require("./broadcast");
+                                                    }
+                                                    delete BroadcastEngine.atr[`${symbol}_${signal.long ? "LONG" : "SHORT"}`];
+                                                    Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
+                                                    Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
+                                                    success = true;
+                                                    if (!manual) {
+                                                        DupSig.add(`${signal.long ? `LONG` : `SHORT`}${symbol}`);
+                                                    }
+                                                    Account.ub(balance - capital);
+                                                    const unrealizedPnL = 0; // amount gained or lost in mcoin
+                                                    const roi = 0; // percentage gained or lost
+                                                    const crossed = Site.TR_MARGIN_MODE == "crossed";
+                                                    let liquidationPrice = fillPrice;
+                                                    if (crossed) {
+                                                        const bal = Account.getBalance();
+                                                        const totalEquity = bal + capital + unrealizedPnL;
+                                                        if (side == "long") {
+                                                            liquidationPrice = fillPrice - ((totalEquity - (fillPrice * amt / leverage)) / amt);
+                                                        }
+                                                        else if (side == "short") {
+                                                            liquidationPrice = fillPrice + ((totalEquity - (fillPrice * amt / leverage)) / amt);
+                                                        }
+                                                    }
+                                                    else {
+                                                        if (side == "long") {
+                                                            liquidationPrice = fillPrice * (1 - (1 / leverage));
+                                                        }
+                                                        else if (side == "short") {
+                                                            liquidationPrice = fillPrice * (1 + (1 / leverage));
+                                                        }
+                                                    }
+
+                                                    Trader.#positionUpdate(
+                                                        symbol,
+                                                        side,
+                                                        unrealizedPnL,
+                                                        roi,
+                                                        liquidationPrice,
+                                                        fillPrice,
+                                                        leverage,
+                                                        fillPrice,
+                                                    );
+                                                    success = true;
+                                                }
+                                                else {
+                                                    success = false;
+                                                }
                                             }
                                         }
                                         else {
-                                            Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);
-                                            Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
-                                            if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${order.code} - ${order.msg}`);
+                                            const order = await BitgetEngine.getRestClient().futuresSubmitOrder({
+                                                symbol: symbol,
+                                                productType: Site.TK_PRODUCT_TYPE,
+                                                marginMode: Site.TR_MARGIN_MODE,
+                                                marginCoin: Site.TK_MARGIN_COIN,
+                                                side: signal.long ? "buy" : "sell",
+                                                tradeSide: "open",
+                                                orderType: "market",
+                                                clientOid: id,
+                                                size: `${amt}`,
+                                            });
+                                            if (order.msg == "success") {
+                                                if (!BroadcastEngine) {
+                                                    BroadcastEngine = require("./broadcast");
+                                                }
+                                                delete BroadcastEngine.atr[`${symbol}_${signal.long ? "LONG" : "SHORT"}`];
+                                                Log.flow(`Trader > Open > ${symbol} > Success > ${signal.description}.`, 3);
+                                                Trader.#tempOrders = Trader.#tempOrders.filter(x => (Date.now() - x.open_time) <= Site.TR_TEMP_ORDERS_MAX_DURATION_MS);
+                                                success = true;
+                                                if (!manual) {
+                                                    DupSig.add(`${signal.long ? `LONG` : `SHORT`}${symbol}`);
+                                                }
+                                            }
+                                            else {
+                                                Trader.#tempOrders = Trader.#tempOrders.filter(x => x.id != id);
+                                                Log.flow(`Trader > Open > ${symbol} > Error > "${order.code} - ${order.msg}".`, 3);
+                                                if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${signal.long ? "LONG" : "SHORT"}*\n\n${order.code} - ${order.msg}`);
+                                            }
                                         }
+                                        // END NEW EXEC
                                     }
                                 }
                                 else {
@@ -278,37 +384,53 @@ class Trader {
                 Trader.#isClosing[symbol] = true;
                 const order = Trader.#orders.filter(x => x.symbol == symbol)[0];
                 if (order) {
-                    let success = false;
-                    try {
-                        const ord = await BitgetEngine.getRestClient().futuresSubmitOrder({
-                            symbol: symbol,
-                            productType: Site.TK_PRODUCT_TYPE,
-                            marginMode: Site.TR_MARGIN_MODE,
-                            marginCoin: Site.TK_MARGIN_COIN,
-                            side: order.side == "long" ? "buy" : "sell",
-                            tradeSide: "close",
-                            orderType: "market",
-                            clientOid: order.id,
-                            size: `${order.size}`,
-                        });
-                        if (ord.msg == "success") {
-                            Log.flow(`Trader > Close > ${symbol} > ${order.side.toUpperCase()} > Success.`, 3);
-                            success = true;
-                        }
-                        else {
-                            Log.flow(`Trader > Close > ${symbol} > Error > "${ord.code} - ${ord.msg}".`, 3);
-                            if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${ord.code} - ${ord.msg}`);
-                        }
-                    } catch (error) {
-                        Log.dev(error);
-                        Log.flow(`Trader > Close > ${symbol} > Error > ${error.body ? `${error.body.code} - ${error.body.msg}` : `Unknown error`}.`, 3);
-                        if (error.body) {
-                            if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${error.body.code} - ${error.body.msg}`);
-                        }
-                    }
-                    finally {
+                    if (Site.SIM_ENABLED) {
+                        let m = `${order.roi > 0 ? '🟢' : order.roi < 0 ? '🔴' : '⚪️'} *Simulated Close Order*\n\n`;
+                        m += `*${order.side.toUpperCase()} ${symbol}*\n`
+                        m += `Size 💰 ${symbol.replace(Site.TK_MARGIN_COIN, "")} ${order.size}\n`;
+                        m += `Leverage ✖️ ${order.leverage}\n`;
+                        m += `Remarks 💬 \`${order.open_reason}\` 🗯 \`${order.close_reason || 'no close reason'}\`\n`
+                        m += `PnL 💰 *${FFF(order.roi)}%* ⬆️ ${FFF(order.peak_roi)}% ⬇️ ${FFF(order.least_roi)}%\n`;
+                        m += `Returned 💰 ${Site.TK_MARGIN_COIN} ${FFF(order.gross_profit)} after ${getTimeElapsed(order.open_time, Date.now())}`;
+                        Trader.sendMessage(m);
+                        Account.ub(Account.getBalance() + order.capital + order.gross_profit);
                         delete Trader.#isClosing[symbol];
-                        resolve(success);
+                        const id = order.id;
+                        Trader.#orders = Trader.#orders.filter(o => o.id != id);
+                    }
+                    else {
+                        let success = false;
+                        try {
+                            const ord = await BitgetEngine.getRestClient().futuresSubmitOrder({
+                                symbol: symbol,
+                                productType: Site.TK_PRODUCT_TYPE,
+                                marginMode: Site.TR_MARGIN_MODE,
+                                marginCoin: Site.TK_MARGIN_COIN,
+                                side: order.side == "long" ? "buy" : "sell",
+                                tradeSide: "close",
+                                orderType: "market",
+                                clientOid: order.id,
+                                size: `${order.size}`,
+                            });
+                            if (ord.msg == "success") {
+                                Log.flow(`Trader > Close > ${symbol} > ${order.side.toUpperCase()} > Success.`, 3);
+                                success = true;
+                            }
+                            else {
+                                Log.flow(`Trader > Close > ${symbol} > Error > "${ord.code} - ${ord.msg}".`, 3);
+                                if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${ord.code} - ${ord.msg}`);
+                            }
+                        } catch (error) {
+                            Log.dev(error);
+                            Log.flow(`Trader > Close > ${symbol} > Error > ${error.body ? `${error.body.code} - ${error.body.msg}` : `Unknown error`}.`, 3);
+                            if (error.body) {
+                                if (manual || Site.TG_SEND_AUTO_FAIL) Trader.sendMessage(`❌ *${symbol} ${order.side.toUpperCase()}*\n\n${error.body.code} - ${error.body.msg}`);
+                            }
+                        }
+                        finally {
+                            delete Trader.#isClosing[symbol];
+                            resolve(success);
+                        }
                     }
                 }
                 else {
@@ -336,7 +458,7 @@ class Trader {
                 await BitgetEngine.addCallbackFunction("position_update", Trader.#positionUpdate);
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "orders");
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "positions");
-                const recovered = await Trader.#getPositions(true);
+                const recovered = Site.SIM_ENABLED ? false : (await Trader.#getPositions(true));
                 if (recovered && Trader.#orders.length > 0) {
                     const l = Trader.#orders.length;
                     Log.flow(`Trader > Recover > ${l} order${l == 1 ? "" : "s"} registered.`, 0);
@@ -359,6 +481,11 @@ class Trader {
      * @returns {Promise<boolean>}
      */
     static #getPositions = (recovery) => {
+        if (Site.SIM_ENABLED) {
+            return new Promise((resolve, reject) => {
+                resolve(true);
+            });
+        }
         return new Promise(async (resolve, reject) => {
             try {
                 const res = await BitgetEngine.getRestClient().getFuturesPositions({
@@ -382,7 +509,7 @@ class Trader {
                             const price = parseFloat(pos.openPriceAvg) || 0;
                             const side = pos.holdSide || "";
                             const size = parseFloat(pos.available) || 0;
-                            const order = new Order(symbol, id, side, ts, Site.TR_RECOVERY_DEFULT_SL_PERC, false, "Recovery");
+                            const order = new Order(symbol, id, side, ts, Site.TR_RECOVERY_DEFULT_SL_PERC, false, "Recovery", 0);
                             order.orderId = `${symbol}_RECOVERY`;
                             order.price = price;
                             order.open_price = price;
@@ -423,6 +550,69 @@ class Trader {
                 resolve(false);
             }
         })
+    }
+
+    /**
+     * Keeps track of symbols that are currently being updated in simulation mode.
+     * So as to eliminate unnecessary concurrency.
+     * @type {string[]}
+     */
+    static #simulatedProcessingSymbols = [];
+
+    /**
+     * Gets updated price of a pair so as to simulation position updates.
+     * @param {string} symbol 
+     * @param {number} price 
+     */
+    static simulatedPositionUpdate = (symbol, price) => {
+        if (Site.SIM_ENABLED) {
+            if (!Trader.#simulatedProcessingSymbols.includes(symbol)) {
+                Trader.#simulatedProcessingSymbols.push(symbol);
+                for (const order of Trader.#orders) {
+                    if (order.symbol == symbol) {
+                        // an order currently exists for this symbol
+                        // things to calculate include:
+                        const side = order.side;
+                        const lev = order.leverage;
+                        const roi = (((side == "long" ? (price - order.open_price) : (order.open_price - price)) / order.open_price) * 100 * order.leverage);
+                        const unrealizedPnL = (roi / 100) * order.capital;
+                        let liquidationPrice = order.liquidation_price || 0;
+                        const crossed = Site.TR_MARGIN_MODE == "crossed";
+                        if (crossed) {
+                            const bal = Account.getBalance();
+                            const totalEquity = bal + order.capital + unrealizedPnL;
+                            if (side == "long") {
+                                liquidationPrice = order.open_price - ((totalEquity - (order.open_price * order.size / order.leverage)) / order.size);
+                            }
+                            else if (side == "short") {
+                                liquidationPrice = order.open_price + ((totalEquity - (order.open_price * order.size / order.leverage)) / order.size);
+                            }
+                        }
+                        else {
+                            if (side == "long") {
+                                liquidationPrice = order.open_price * (1 - (1 / order.leverage));
+                            }
+                            else if (side == "short") {
+                                liquidationPrice = order.open_price * (1 + (1 / order.leverage));
+                            }
+                        }
+                        if (order.roi != roi) {
+                            Trader.#positionUpdate(
+                                symbol,
+                                order.side,
+                                unrealizedPnL,
+                                roi,
+                                liquidationPrice,
+                                order.open_price,
+                                order.leverage,
+                                price,
+                            )
+                        }
+                    }
+                }
+                Trader.#simulatedProcessingSymbols = Trader.#simulatedProcessingSymbols.filter(s => s != symbol);
+            }
+        }
     }
 
     /**
@@ -713,7 +903,7 @@ class Trader {
                         // means the dominant signal is the opposite of this trade
                         for (let i = 0; i < Site.DC_SELL.length; i++) {
                             let s = Site.DC_SELL[i];
-                            if(duration >= s.minDuration && duration <= s.maxDuration && order.roi >= s.minPnL){
+                            if (duration >= s.minDuration && duration <= s.maxDuration && order.roi >= s.minPnL) {
                                 exitAlready = true;
                                 order.close_reason = `Damage Control ${s.minPnL}%`;
                                 Trader.closeOrder(symbol);

@@ -164,6 +164,10 @@ class Site {
     static DC_MAX_LATEST_SIGNALS = parseInt(process.env.DC_MAX_LATEST_SIGNALS || "0") || 5;
     static DC_MIN_DOM_PERC = parseFloat(process.env.DC_MIN_DOM_PERC || '0') || 51;
     static DC_SELL = (process.env.DC_SELL || "").split("|").filter(x => x.length > 0).map(x => x.split(" ").filter(y => y.length > 0).map(y => parseFloat(y)).filter(y => !Number.isNaN(y))).filter(x => x.length == 3).map(x => ({ minDuration: x[0] || 0, maxDuration: x[1] || 0, minPnL: x[2] || 0 })).filter(x => x.minDuration >= 0 && x.maxDuration >= x.minDuration);
+
+    static SIM_ENABLED = (process.env.SIM_ENABLED || "").toLowerCase() == "true";
+    static SIM_STARTING_BALANCE_MCOIN = parseFloat(process.env.SIM_STARTING_BALANCE_MCOIN || "0") || 0;
+    static SIM_MAX_CONCURRENT_TRADES = parseInt(process.env.SIM_MAX_CONCURRENT_TRADES || "0") || 0;
 }
 
 module.exports = Site;

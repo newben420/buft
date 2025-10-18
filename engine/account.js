@@ -15,8 +15,15 @@ class Account {
     static start = () => {
         return new Promise(async (resolve, reject) => {
             try {
-                await BitgetEngine.addCallbackFunction("balance_update", Account.#updateBalance);
+                if(Site.SIM_ENABLED){
+                    if(Site.SIM_STARTING_BALANCE_MCOIN){
+                        Account.#updateBalance(Site.SIM_STARTING_BALANCE_MCOIN);
+                    }
+                }
+                else{
+                    await BitgetEngine.addCallbackFunction("balance_update", Account.#updateBalance);
                 BitgetEngine.getWSClient().subscribeTopic(Site.TK_PRODUCT_TYPE, "account");
+                }
                 resolve(true);
             } catch (error) {
                 Log.dev(error);
@@ -69,6 +76,8 @@ class Account {
         Account.#balance = bal;
         Log.flow(`Account > Balance > Update > ${Site.TK_MARGIN_COIN} ${FFF(bal)}`, 5);
     }
+
+    static ub = Account.#updateBalance;
 
 }
 
