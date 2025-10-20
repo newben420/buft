@@ -399,11 +399,11 @@ class BroadcastEngine {
                 for (const cond of Site.ATR_INDS){
                     if(cond.ind == "atr"){
                         pass = INDICATORS.atr(atd.price, true);
-                        passReason = 'atr';
+                        passReason = '';
                     }
                     else if(cond.ind == "tch"){
                         pass = INDICATORS.tch(cond.gran, true);
-                        passReason = `tch ${cond.gran}`;
+                        passReason = ` TCH ${cond.gran}`;
                     }
                     if(pass){
                         break;
@@ -413,13 +413,13 @@ class BroadcastEngine {
                     const domSig = this.getDominantSignal();
                     if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.long) {
                         const mark = atd.price / (1 + (atd.vol) / 100);
-                        const signal = new Signal(false, true, "ATR Long "+` (${passReason})`, atd.vol, atd.sl, mark);
+                        const signal = new Signal(false, true, ("ATR Long"+`${passReason}`).trim(), atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
                         if (done) {
-                            TelegramEngine.sendMessage(`✅ ATR \`(${passReason}\`) executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`✅ ATR${passReason} executed for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         else {
-                            TelegramEngine.sendMessage(`❌ Failed to execute ATR \`(${passReason}\`) for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR${passReason} for ${symbol} LONG at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         delete BroadcastEngine.atr[`${symbol}_LONG`];
                     }
@@ -436,11 +436,11 @@ class BroadcastEngine {
                 for (const cond of Site.ATR_INDS){
                     if(cond.ind == "atr"){
                         pass = INDICATORS.atr(atd.price, false);
-                        passReason = 'atr';
+                        passReason = '';
                     }
                     else if(cond.ind == "tch"){
                         pass = INDICATORS.tch(cond.gran, false);
-                        passReason = `tch ${cond.gran}`;
+                        passReason = ` TCH ${cond.gran}`;
                     }
                     if(pass){
                         break;
@@ -450,13 +450,13 @@ class BroadcastEngine {
                     const domSig = this.getDominantSignal();
                     if ((domSig == "no_signal" || domSig == atd.signal) && BroadcastEngine.short) {
                         const mark = atd.price / (1 - (atd.vol) / 100);
-                        const signal = new Signal(true, false, "ATR Short"+` (${passReason})`, atd.vol, atd.sl, mark);
+                        const signal = new Signal(true, false, ("ATR Short"+`${passReason}`).trim(), atd.vol, atd.sl, mark);
                         const done = await Trader.openOrder(symbol, signal, false, true);
                         if (done) {
-                            TelegramEngine.sendMessage(`✅ ATR \`(${passReason}\`) executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`✅ ATR${passReason} executed for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         else {
-                            TelegramEngine.sendMessage(`❌ Failed to execute ATR \`(${passReason}\`) for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
+                            TelegramEngine.sendMessage(`❌ Failed to execute ATR${passReason} for ${symbol} SHORT at ${FFF(price)} after ${getTimeElapsed(atd.ts, Date.now())}`);
                         }
                         delete BroadcastEngine.atr[`${symbol}_SHORT`];
                     }
