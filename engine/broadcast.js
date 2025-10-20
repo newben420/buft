@@ -403,7 +403,7 @@ class BroadcastEngine {
                     }
                     else if(cond.ind == "tch"){
                         pass = INDICATORS.tch(cond.gran, true);
-                        passReason = `tch ${gran}`;
+                        passReason = `tch ${cond.gran}`;
                     }
                     if(pass){
                         break;
@@ -440,7 +440,7 @@ class BroadcastEngine {
                     }
                     else if(cond.ind == "tch"){
                         pass = INDICATORS.tch(cond.gran, false);
-                        passReason = `tch ${gran}`;
+                        passReason = `tch ${cond.gran}`;
                     }
                     if(pass){
                         break;
