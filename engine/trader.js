@@ -799,7 +799,7 @@ class Trader {
      * @param {number} price
      */
     static #positionUpdate = (symbol, side, pnl, roi, liquidPrice, breakEvenPrice, leverage, price = 0) => {
-        Log.flow(`Trader > Position > ${symbol} > ${Site.TK_MARGIN_COIN} ${FFF(pnl)} (${roi.toFixed(2)}%)`, 2);
+        Log.flow(`Trader > Position > ${symbol} > ${Site.TK_MARGIN_COIN} ${FFF(pnl)} (${roi.toFixed(2)}%)`, 8);
         const order = Trader.#orders.find(x => x.symbol == symbol && x.side == side);
         if (order) {
             if (price > 0 && price) {
