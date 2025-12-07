@@ -169,6 +169,8 @@ class Site {
     static SIM_ENABLED = (process.env.SIM_ENABLED || "").toLowerCase() == "true";
     static SIM_STARTING_BALANCE_MCOIN = parseFloat(process.env.SIM_STARTING_BALANCE_MCOIN || "0") || 0;
     static SIM_MAX_CONCURRENT_TRADES = parseInt(process.env.SIM_MAX_CONCURRENT_TRADES || "0") || 0;
+    static ALRT_SHOW_ONLY_SUPPORTED = (process.env.ALRT_SHOW_ONLY_SUPPORTED || "").toLowerCase() == "true";
+    static ALRT_SHOW_MINIMUM_CONFIDENCE = parseFloat(process.env.ALRT_SHOW_MINIMUM_CONFIDENCE || "0") || 0;
 }
 
 module.exports = Site;
