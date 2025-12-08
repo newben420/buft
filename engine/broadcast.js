@@ -279,13 +279,13 @@ class BroadcastEngine {
             m += `\n\n🤖 AI Verdict\n\`\`\`\n${verdict.str}\`\`\``;
         }
 
-        if(Site.ALRT_SHOW_ONLY_SUPPORTED && !(verdict || {supported: false}).supported) {
-            return;
-        }
+        // if(Site.ALRT_SHOW_ONLY_SUPPORTED && !(verdict || {supported: false}).supported) {
+        //     return;
+        // }
 
-        if(Site.ALRT_SHOW_MINIMUM_CONFIDENCE && (verdict || {confidence: 0}).confidence < Site.ALRT_SHOW_MINIMUM_CONFIDENCE) {
-            return;
-        }
+        // if(Site.ALRT_SHOW_MINIMUM_CONFIDENCE && (verdict || {confidence: 0}).confidence < Site.ALRT_SHOW_MINIMUM_CONFIDENCE) {
+        //     return;
+        // }
 
         if (!process.env.COLLER) {
             const ATRID = `${ticker}_${signal.long ? "LONG" : "SHORT"}`;
