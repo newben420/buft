@@ -64,7 +64,7 @@ class TelegramEngine {
          */
         let message = `🚀 *${Site.TITLE}* - ${getDateTime()}\n\n`;
         const trader = Trader.isEnabled();
-        message += `Mode ${Site.SIM_ENABLED ? `🗿 Simulated` : `🌱 Live`}\n`
+        // message += `Mode ${Site.SIM_ENABLED ? `🗿 Simulated` : `🌱 Live`}\n`
         message += `Trader Enabled ${trader ? `🟢 Yes` : `🔴 No`}\n`;
         message += `Auto ATR Enabled ${BroadcastEngine.autoATR ? `🟢 Yes` : `🔴 No`}\n`;
         message += `Tickers 💲 ${formatNumber(TickerEngine.getLength())}\n`;

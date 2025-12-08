@@ -192,7 +192,7 @@ class Trader {
                                         // also... the engine that periodically and manually gets order status... in simulation mode,
                                         if (Site.SIM_ENABLED) {
                                             // EXTERNAL WORK HERE
-                                            let OID = `SIM${Date.now()}`;
+                                            let OID = `S${Date.now()}`;
                                             let side = signal.long ? "long" : "short";
                                             let tradeSide = "open";
                                             // do pre trade checks
@@ -385,7 +385,7 @@ class Trader {
                 const order = Trader.#orders.filter(x => x.symbol == symbol)[0];
                 if (order) {
                     if (Site.SIM_ENABLED) {
-                        let m = `${order.roi > 0 ? '🟢' : order.roi < 0 ? '🔴' : '⚪️'} *Simulated Close Order*\n\n`;
+                        let m = `${order.roi > 0 ? '🟢' : order.roi < 0 ? '🔴' : '⚪️'} *Close Order*\n\n`;
                         m += `*${order.side.toUpperCase()} ${symbol}*\n`
                         m += `Size 💰 ${symbol.replace(Site.TK_MARGIN_COIN, "")} ${order.size}\n`;
                         m += `Leverage ✖️ ${order.leverage}\n`;
